@@ -19,17 +19,25 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
 
-package uk.nhs.hee.tis.template;
+package uk.nhs.hee.tis.common.upload.config;
 
-import org.junit.jupiter.api.Test;
-import org.springframework.boot.test.context.SpringBootTest;
+import io.sentry.spring.SentryExceptionResolver;
+import io.sentry.spring.SentryServletContextInitializer;
+import org.springframework.boot.web.servlet.ServletContextInitializer;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.servlet.HandlerExceptionResolver;
 
-@SpringBootTest
-//TODO: Update package and class name.
-class TemplateApplicationTest {
+@Configuration
+public class SentryConfiguration {
 
-  @Test
-  void contextLoads() {
+  @Bean
+  public HandlerExceptionResolver sentryExceptionResolver() {
+    return new SentryExceptionResolver();
+  }
 
+  @Bean
+  public ServletContextInitializer sentryServletContextInitilizer() {
+    return new SentryServletContextInitializer();
   }
 }
