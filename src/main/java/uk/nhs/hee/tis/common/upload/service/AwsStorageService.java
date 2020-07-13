@@ -1,4 +1,4 @@
-package uk.nhs.hee.tis.common.upload;
+package uk.nhs.hee.tis.common.upload.service;
 
 import static java.lang.String.format;
 

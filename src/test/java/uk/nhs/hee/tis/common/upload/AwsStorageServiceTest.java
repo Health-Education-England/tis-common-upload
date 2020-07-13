@@ -21,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.FileUploadDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
+import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
 
 @ExtendWith(MockitoExtension.class)
 public class AwsStorageServiceTest {
