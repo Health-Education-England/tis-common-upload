@@ -25,7 +25,6 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 
 @SpringBootApplication
-//TODO: Update package and class name.
 public class CommonUploadApplication {
 
   public static void main(String[] args) {
