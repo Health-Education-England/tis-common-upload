@@ -12,7 +12,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
-import uk.nhs.hee.tis.common.upload.AwsStorageService;
+import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
 
 @ExtendWith(MockitoExtension.class)
 @WebMvcTest(AwsStorageController.class)

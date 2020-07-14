@@ -69,7 +69,6 @@ sonarqube {
     property "sonar.host.url", "https://sonarcloud.io"
     property "sonar.login", System.getenv("SONAR_TOKEN")
     property "sonar.organization", "health-education-england"
-    // TODO: Update sonar.projectKey to real value.
     property "sonar.projectKey", "Health-Education-England_tis-common-upload"
 
     property "sonar.java.checkstyle.reportPaths",
@@ -78,6 +77,9 @@ sonarqube {
 }
 
 test {
+  testLogging {
+    exceptionFormat = 'full'
+  }
   finalizedBy jacocoTestReport
   useJUnitPlatform()
 }
