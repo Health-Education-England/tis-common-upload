@@ -7,8 +7,10 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import uk.nhs.hee.tis.common.upload.dto.DownloadDto;
 import uk.nhs.hee.tis.common.upload.dto.FileUploadDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
@@ -33,6 +35,24 @@ public class AwsStorageService {
       return amazonS3.putObject(request);
     } catch (Exception e) {
       log.error("Fail to upload file [{}] in bucket [{}]", file.getOriginalFilename(), bucketName);
+      throw new AwsStorageException(e.getMessage());
+    }
+  }
+
+  public byte[] download(final DownloadDto download) {
+    try {
+      final var key = format("%s/%s", download.getFolderPath(), download.getFileName());
+      log.info("Download file: {} from bucket: {} with key: {}", download.getFileName(),
+          download.getBucketName(), key);
+      final var s3Object = amazonS3.getObject(download.getBucketName(), key);
+      final var inputStream = s3Object.getObjectContent();
+      final var content = IOUtils.toByteArray(inputStream);
+      log.info("File downloaded successfully.");
+      s3Object.close();
+      return content;
+    } catch (Exception e) {
+      log.error("Fail to download file [{}] from bucket [{}]", download.getFileName(),
+          download.getBucketName());
       throw new AwsStorageException(e.getMessage());
     }
   }

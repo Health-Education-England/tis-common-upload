@@ -1,6 +1,10 @@
 package uk.nhs.hee.tis.common.upload.controller;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -45,5 +49,17 @@ public class AwsStorageControllerTest {
         .param("bucketName", bucketName)
         .param("folderPath", folderPath))
         .andExpect(status().isOk());
+  }
+
+  @Test
+  public void shouldDownloadFile() throws Exception {
+    final var content = "This is test file";
+    when(storageService.download(any())).thenReturn(content.getBytes());
+    this.mockMvc.perform(get(STORAGE_URL)
+        .param("bucketName", "test-bucket")
+        .param("folderPath", "1/concern")
+        .param("fileName", "test.txt"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(content));
   }
 }
