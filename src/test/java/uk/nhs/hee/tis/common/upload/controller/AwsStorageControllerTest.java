@@ -23,6 +23,9 @@ import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
 public class AwsStorageControllerTest {
 
   private static final String STORAGE_URL = "/api/storage";
+  private static final String UPLOAD = "/upload";
+  private static final String DOWNLOAD = "/download";
+  private static final String LIST = "/list";
 
   @Autowired
   private MockMvc mockMvc;
@@ -44,7 +47,7 @@ public class AwsStorageControllerTest {
     final var file = new MockMultipartFile("file", "test.txt",
         "text/plain", "Spring Framework".getBytes());
 
-    this.mockMvc.perform(multipart(STORAGE_URL)
+    this.mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
         .file(file)
         .param("bucketName", bucketName)
         .param("folderPath", folderPath))
@@ -52,14 +55,47 @@ public class AwsStorageControllerTest {
   }
 
   @Test
+  public void uploadFileShouldThrowExceptionWhenNoBucketNameProvided() throws Exception {
+    final var file = new MockMultipartFile("file", "test.txt",
+        "text/plain", "Spring Framework".getBytes());
+
+    this.mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
+        .file(file)
+        .param("folderPath", folderPath))
+        .andExpect(status().is4xxClientError());
+  }
+
+  @Test
   public void shouldDownloadFile() throws Exception {
     final var content = "This is test file";
     when(storageService.download(any())).thenReturn(content.getBytes());
-    this.mockMvc.perform(get(STORAGE_URL)
+    this.mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
         .param("bucketName", "test-bucket")
-        .param("folderPath", "1/concern")
-        .param("fileName", "test.txt"))
+        .param("key", "1/concern/test.txt"))
         .andExpect(status().isOk())
         .andExpect(content().string(content));
+  }
+
+  @Test
+  public void downloadFileShouldThrowExceptionWhenNoKeyProvided() throws Exception {
+    when(storageService.download(any())).thenReturn("test".getBytes());
+    this.mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
+        .param("bucketName", "test-bucket"))
+        .andExpect(status().is4xxClientError());
+  }
+
+  @Test
+  public void shouldListAllFiles() throws Exception {
+    this.mockMvc.perform(get(STORAGE_URL + LIST)
+        .param("bucketName", "test-bucket")
+        .param("folderPath", "1/concern"))
+        .andExpect(status().isOk());
+  }
+
+  @Test
+  public void listAllFilesShouldThrowExceptionWhenFolderPathNotProvided() throws Exception {
+    this.mockMvc.perform(get(STORAGE_URL + LIST)
+        .param("bucketName", "test-bucket"))
+        .andExpect(status().is4xxClientError());
   }
 }
