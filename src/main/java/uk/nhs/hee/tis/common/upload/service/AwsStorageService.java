@@ -22,6 +22,12 @@ public class AwsStorageService {
   @Autowired
   private AmazonS3 amazonS3;
 
+  /**
+   *  Upload to S3.
+   *
+   * @param storageDto contains information about file
+   * @return result of s3 put call.
+   */
   public PutObjectResult upload(final StorageDto storageDto) {
     final var bucketName = storageDto.getBucketName();
     final var folderPath = storageDto.getFolderPath();
@@ -40,6 +46,12 @@ public class AwsStorageService {
     }
   }
 
+  /**
+   * Download file from S3.
+   *
+   * @param storageDto contains information about file
+   * @return file which will be downloaded
+   */
   public byte[] download(final StorageDto storageDto) {
     try {
       log.info("Download file: {} from bucket: {} with key: {}", storageDto.getKey(),
@@ -57,6 +69,12 @@ public class AwsStorageService {
     }
   }
 
+  /**
+   * Fetch list of files from S3.
+   *
+   * @param storageDto contains information about file
+   * @return List of S3 object summaries.
+   */
   public List<S3ObjectSummary> listFiles(final StorageDto storageDto) {
     try {
       final var listObjects = amazonS3

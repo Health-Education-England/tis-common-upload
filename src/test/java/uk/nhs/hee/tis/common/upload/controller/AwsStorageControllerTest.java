@@ -20,7 +20,7 @@ import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
 
 @ExtendWith(MockitoExtension.class)
 @WebMvcTest(AwsStorageController.class)
-public class AwsStorageControllerTest {
+class AwsStorageControllerTest {
 
   private static final String STORAGE_URL = "/api/storage";
   private static final String UPLOAD = "/upload";
@@ -43,7 +43,7 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void shouldUploadFile() throws Exception {
+  void shouldUploadFile() throws Exception {
     final var file = new MockMultipartFile("file", "test.txt",
         "text/plain", "Spring Framework".getBytes());
 
@@ -55,7 +55,7 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void uploadFileShouldThrowExceptionWhenNoBucketNameProvided() throws Exception {
+  void uploadFileShouldThrowExceptionWhenNoBucketNameProvided() throws Exception {
     final var file = new MockMultipartFile("file", "test.txt",
         "text/plain", "Spring Framework".getBytes());
 
@@ -66,7 +66,7 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void shouldDownloadFile() throws Exception {
+  void shouldDownloadFile() throws Exception {
     final var content = "This is test file";
     when(storageService.download(any())).thenReturn(content.getBytes());
     this.mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
@@ -77,7 +77,7 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void downloadFileShouldThrowExceptionWhenNoKeyProvided() throws Exception {
+  void downloadFileShouldThrowExceptionWhenNoKeyProvided() throws Exception {
     when(storageService.download(any())).thenReturn("test".getBytes());
     this.mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
         .param("bucketName", "test-bucket"))
@@ -85,7 +85,7 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void shouldListAllFiles() throws Exception {
+  void shouldListAllFiles() throws Exception {
     this.mockMvc.perform(get(STORAGE_URL + LIST)
         .param("bucketName", "test-bucket")
         .param("folderPath", "1/concern"))
@@ -93,7 +93,7 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void listAllFilesShouldThrowExceptionWhenFolderPathNotProvided() throws Exception {
+  void listAllFilesShouldThrowExceptionWhenFolderPathNotProvided() throws Exception {
     this.mockMvc.perform(get(STORAGE_URL + LIST)
         .param("bucketName", "test-bucket"))
         .andExpect(status().is4xxClientError());

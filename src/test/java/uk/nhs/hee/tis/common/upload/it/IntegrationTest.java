@@ -1,4 +1,4 @@
-package uk.nhs.hee.tis.common.upload;
+package uk.nhs.hee.tis.common.upload.it;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;

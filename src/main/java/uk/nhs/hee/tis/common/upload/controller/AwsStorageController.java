@@ -27,6 +27,12 @@ public class AwsStorageController {
   @Autowired
   private AwsStorageService awsStorageService;
 
+  /**
+   * API to upload file to s3.
+   *
+   * @param storageDto to upload
+   * @return Response entity with status code 200
+   */
   @PostMapping("/upload")
   public ResponseEntity uploadFile(@ModelAttribute StorageDto storageDto) {
 
@@ -41,6 +47,13 @@ public class AwsStorageController {
     }
   }
 
+  /**
+   * API to download file from S3.
+   *
+   * @param bucketName name of the bucket
+   * @param key file location with name
+   * @return Response entity with status code 200 and file to download
+   */
   @GetMapping("/download")
   public ResponseEntity downloadFile(@RequestParam("bucketName") final String bucketName,
       @RequestParam("key") final String key) {
@@ -63,6 +76,13 @@ public class AwsStorageController {
     }
   }
 
+  /**
+   * API for list files from S3.
+   *
+   * @param bucketName name of the bucket
+   * @param folderPath folder path from where files location has to be fetch.
+   * @return Response entity with code 200 and object summaries
+   */
   @GetMapping("/list")
   public ResponseEntity listFiles(@RequestParam("bucketName") final String bucketName,
       @RequestParam("folderPath") final String folderPath) {

@@ -30,7 +30,7 @@ import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
 @ExtendWith(MockitoExtension.class)
-public class AwsStorageServiceTest {
+class AwsStorageServiceTest {
 
   private final Faker faker = new Faker();
 
@@ -68,7 +68,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldUploadFile() throws IOException {
+  void shouldUploadFile() throws IOException {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
@@ -82,7 +82,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldHandleExceptionIfUploadFails() throws IOException {
+  void shouldHandleExceptionIfUploadFails() throws IOException {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
@@ -97,7 +97,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldDownloadFileFromS3() {
+  void shouldDownloadFileFromS3() {
     final var storageDto = StorageDto.builder().bucketName(bucketName)
         .key(key).build();
     final var s3Object = new S3Object();
@@ -110,7 +110,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldThrowExceptionWhenDownloadFileNotFound() {
+  void shouldThrowExceptionWhenDownloadFileNotFound() {
     final var storageDto = StorageDto.builder().bucketName(bucketName)
         .key(fileName).build();
     final var s3Object = new S3Object();
@@ -123,7 +123,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldListFilesFromS3() {
+  void shouldListFilesFromS3() {
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .build();
     final var key = folderName + "/test.txt";
@@ -140,7 +140,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldThrowExceptionWhenListNotFound() {
+  void shouldThrowExceptionWhenListNotFound() {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
@@ -152,5 +152,4 @@ public class AwsStorageServiceTest {
     });
 
   }
-
 }

@@ -77,9 +77,6 @@ sonarqube {
 }
 
 test {
-  testLogging {
-    exceptionFormat = 'full'
-  }
   finalizedBy jacocoTestReport
   useJUnitPlatform()
 }
@@ -87,23 +84,3 @@ test {
 bootRun {
   systemProperties System.properties
 }
-
-sourceSets {
-  integrationTest {
-    java.srcDir file('src/integrationTest/java')
-    resources.srcDir file('src/integrationTest/resources')
-    compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
-    runtimeClasspath += output + compileClasspath
-  }
-}
-
-task integrationTest(type: Test) {
-  useJUnitPlatform()
-  description = 'Runs the integration tests.'
-  group = 'verification'
-  testClassesDirs = sourceSets.integrationTest.output.classesDirs
-  classpath = sourceSets.integrationTest.runtimeClasspath
-  mustRunAfter test
-}
-
-check.dependsOn integrationTest
