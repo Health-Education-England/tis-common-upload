@@ -10,7 +10,6 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -27,12 +26,18 @@ public class AwsStorageController {
   @Autowired
   private AwsStorageService awsStorageService;
 
-  @PostMapping("/upload")
-  public ResponseEntity uploadFile(@ModelAttribute StorageDto storageDto) {
+  /**
+   * API to upload file to s3.
+   *
+   * @param storageDto to upload
+   * @return Response entity with status code 200
+   */
+  @PostMapping(value = "/upload")
+  public ResponseEntity uploadFile(final StorageDto storageDto) {
 
+    log.info("Request receive to upload file: {}", storageDto);
     if (Objects.nonNull(storageDto.getBucketName()) && Objects.nonNull(storageDto.getFolderPath())
         && Objects.nonNull(storageDto.getFile())) {
-      log.info("Request receive to upload file: {}", storageDto);
       final var response = awsStorageService.upload(storageDto);
       return ResponseEntity.ok(response);
     } else {
@@ -41,6 +46,13 @@ public class AwsStorageController {
     }
   }
 
+  /**
+   * API to download file from S3.
+   *
+   * @param bucketName name of the bucket
+   * @param key        file location with name
+   * @return Response entity with status code 200 and file to download
+   */
   @GetMapping("/download")
   public ResponseEntity downloadFile(@RequestParam("bucketName") final String bucketName,
       @RequestParam("key") final String key) {
