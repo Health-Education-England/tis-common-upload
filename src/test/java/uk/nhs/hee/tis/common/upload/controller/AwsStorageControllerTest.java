@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,6 +18,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
+import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
 import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,11 +38,20 @@ public class AwsStorageControllerTest {
 
   private String folderPath;
   private String bucketName;
+  private String key;
+  private String fileName;
+  private String metadataFileName;
+  private String metadataFileType;
+  private ObjectMapper objectMapper = new ObjectMapper();
 
   @BeforeEach
   public void setup() {
     folderPath = "1/concern";
     bucketName = "tis-test-bucket";
+    fileName = "test.txt";
+    key = folderPath + "/" + fileName;
+    metadataFileName = fileName;
+    metadataFileType = "txt";
   }
 
   @Test
@@ -86,10 +98,15 @@ public class AwsStorageControllerTest {
 
   @Test
   public void shouldListAllFiles() throws Exception {
+    final var fileSummaryDto = FileSummaryDto.builder().bucketName(bucketName).key(key)
+        .fileName(metadataFileName).fileType(metadataFileType).build();
+    final var fileSummaryDtoList = List.of(fileSummaryDto);
+    when(storageService.listFiles(any())).thenReturn(fileSummaryDtoList);
     this.mockMvc.perform(get(STORAGE_URL + LIST)
         .param("bucketName", "test-bucket")
         .param("folderPath", "1/concern"))
-        .andExpect(status().isOk());
+        .andExpect(status().isOk())
+        .andExpect(content().string(objectMapper.writeValueAsString(fileSummaryDtoList)));
   }
 
   @Test

@@ -1,6 +1,7 @@
 package uk.nhs.hee.tis.common.upload.service;
 
 import static java.lang.String.format;
+import static org.apache.commons.io.FilenameUtils.getExtension;
 
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ObjectMetadata;
@@ -8,16 +9,21 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
 @Slf4j
 @Service
 public class AwsStorageService {
+
+  private static final String USER_METADATA_FILE_NAME = "name";
+  private static final String USER_METADATA_FILE_TYPE = "type";
 
   @Autowired
   private AmazonS3 amazonS3;
@@ -30,8 +36,10 @@ public class AwsStorageService {
     try {
       createBucketIfNotExist(bucketName);
       final var key = format("%s/%s", folderPath, file.getOriginalFilename());
-      final var request = new PutObjectRequest(bucketName, key, file.getInputStream(),
-          new ObjectMetadata());
+      final var metadata = new ObjectMetadata();
+      metadata.addUserMetadata(USER_METADATA_FILE_NAME, file.getOriginalFilename());
+      metadata.addUserMetadata(USER_METADATA_FILE_TYPE, getExtension(file.getOriginalFilename()));
+      final var request = new PutObjectRequest(bucketName, key, file.getInputStream(), metadata);
       log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
       return amazonS3.putObject(request);
     } catch (Exception e) {
@@ -57,11 +65,14 @@ public class AwsStorageService {
     }
   }
 
-  public List<S3ObjectSummary> listFiles(final StorageDto storageDto) {
+  public List<FileSummaryDto> listFiles(final StorageDto storageDto) {
     try {
       final var listObjects = amazonS3
           .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
-      return listObjects.getObjectSummaries();
+      final var fileSummaries = listObjects.getObjectSummaries().stream().map(summary -> {
+        return buildFileSummary(summary);
+      }).collect(Collectors.toList());
+      return fileSummaries;
     } catch (Exception e) {
       log.error("Fail to list files from bucket: {} with folderPath: {}",
           storageDto.getBucketName(), storageDto.getFolderPath());
@@ -73,5 +84,17 @@ public class AwsStorageService {
     if (!amazonS3.doesBucketExistV2(bucketName)) {
       amazonS3.createBucket(bucketName);
     }
+  }
+
+  private FileSummaryDto buildFileSummary(final S3ObjectSummary summary) {
+    final var objectMetadata = amazonS3
+        .getObjectMetadata(summary.getBucketName(), summary.getKey());
+    log.debug("Metadata details for file:{}, Metadata: {}", summary.getKey(), objectMetadata);
+    return FileSummaryDto.builder()
+        .bucketName(summary.getBucketName())
+        .key(summary.getKey())
+        .fileName(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_NAME))
+        .fileType(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE))
+        .build();
   }
 }
