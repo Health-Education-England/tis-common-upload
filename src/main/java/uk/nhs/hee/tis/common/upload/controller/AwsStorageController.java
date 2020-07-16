@@ -7,8 +7,10 @@ import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -79,4 +81,22 @@ public class AwsStorageController {
           "Bucket Name and Folder Path, all parameters required to serve list");
     }
   }
+
+  @DeleteMapping("/remove")
+  public ResponseEntity<String> removeFile(@RequestParam("bucketName") final String bucketName,
+      @RequestParam("key") final String key) {
+
+    if (Objects.nonNull(bucketName) && Objects.nonNull(key)) {
+      log.info("Request receive to remove file: {} from bucket: {}", key, bucketName);
+      final var storageDto = StorageDto.builder().bucketName(bucketName)
+          .key(key).build();
+      awsStorageService.remove(storageDto);
+      final String response = "[" + key + "] deleted successfully.";
+      return new ResponseEntity<>(response, HttpStatus.OK);
+    } else {
+      throw new AwsStorageException(
+          "Bucket Name and Key both parameters required to serve download");
+    }
+  }
+
 }

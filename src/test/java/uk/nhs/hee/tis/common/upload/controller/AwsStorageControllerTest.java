@@ -25,6 +25,7 @@ public class AwsStorageControllerTest {
   private static final String STORAGE_URL = "/api/storage";
   private static final String UPLOAD = "/upload";
   private static final String DOWNLOAD = "/download";
+  private static final String REMOVE = "/remove";
   private static final String LIST = "/list";
 
   @Autowired
@@ -97,5 +98,16 @@ public class AwsStorageControllerTest {
     this.mockMvc.perform(get(STORAGE_URL + LIST)
         .param("bucketName", "test-bucket"))
         .andExpect(status().is4xxClientError());
+  }
+
+  @Test
+  public void shouldRemoveFile() throws Exception {
+    final var content = "This is test file";
+    //when(storageService.remove(any())).thenReturn();
+    this.mockMvc.perform(get(STORAGE_URL + REMOVE)
+        .param("bucketName", "test-bucket")
+        .param("key", "1/concern/test.txt"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(content));
   }
 }

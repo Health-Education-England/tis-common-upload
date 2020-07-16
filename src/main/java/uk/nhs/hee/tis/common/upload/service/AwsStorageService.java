@@ -2,6 +2,8 @@ package uk.nhs.hee.tis.common.upload.service;
 
 import static java.lang.String.format;
 
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.SdkClientException;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
@@ -66,6 +68,19 @@ public class AwsStorageService {
       log.error("Fail to list files from bucket: {} with folderPath: {}",
           storageDto.getBucketName(), storageDto.getFolderPath());
       throw new AwsStorageException(e.getMessage());
+    }
+  }
+
+  public void remove(final StorageDto storageDto) {
+    try {
+      log.info("Remove file: {} from bucket: {} with key: {}", storageDto.getKey(),
+          storageDto.getBucketName(), storageDto.getKey());
+      amazonS3.deleteObject(storageDto.getBucketName(), storageDto.getKey());
+      log.info("File is removed successfully.");
+    } catch (AmazonServiceException e) {
+      e.printStackTrace();
+    }  catch (SdkClientException e) {
+      e.printStackTrace();
     }
   }
 
