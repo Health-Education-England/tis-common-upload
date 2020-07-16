@@ -5,6 +5,8 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.core.Is.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.amazonaws.AmazonServiceException;
@@ -150,7 +152,24 @@ public class AwsStorageServiceTest {
     Assertions.assertThrows(AwsStorageException.class, () -> {
       awsStorageService.listFiles(storageDto);
     });
+  }
 
+  @Test
+  public void shouldDeleteFileFromS3() {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
+        .build();
+    awsStorageService.delete(storageDto);
+    verify(amazonS3).deleteObject(bucketName, key);
+  }
+
+  @Test
+  public void shouldThrowExceptionWhenFailToDeleteFile() {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
+        .build();
+    doThrow(AmazonServiceException.class).when(amazonS3).deleteObject(bucketName, key);
+    Assertions.assertThrows(AwsStorageException.class, () -> {
+      awsStorageService.delete(storageDto);
+    });
   }
 
 }

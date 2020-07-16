@@ -71,16 +71,16 @@ public class AwsStorageService {
     }
   }
 
-  public void remove(final StorageDto storageDto) {
+  public void delete(final StorageDto storageDto) {
     try {
       log.info("Remove file: {} from bucket: {} with key: {}", storageDto.getKey(),
           storageDto.getBucketName(), storageDto.getKey());
       amazonS3.deleteObject(storageDto.getBucketName(), storageDto.getKey());
       log.info("File is removed successfully.");
-    } catch (AmazonServiceException e) {
-      e.printStackTrace();
-    }  catch (SdkClientException e) {
-      e.printStackTrace();
+    } catch (Exception e) {
+      log.error("Fail to delete file from bucket: {} with key: {}",
+          storageDto.getBucketName(), storageDto.getKey());
+      throw new AwsStorageException(e.getMessage());
     }
   }
 
