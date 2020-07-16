@@ -45,7 +45,7 @@ public class AwsStorageServiceTest {
   private AmazonS3 amazonS3;
 
   @Mock
-  private MultipartFile file;
+  private List<MultipartFile> files;
 
   @Mock
   private InputStream inputStream;
@@ -79,10 +79,10 @@ public class AwsStorageServiceTest {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
-        .file(file)
+        .files(files)
         .build();
-    when(file.getOriginalFilename()).thenReturn(fileName);
-    when(file.getInputStream()).thenReturn(inputStream);
+    when(files.get(0).getOriginalFilename()).thenReturn(fileName);
+    when(files.get(0).getInputStream()).thenReturn(inputStream);
     when(amazonS3.putObject(any())).thenReturn(result);
     final var putObjectResult = awsStorageService.upload(storageDto);
     assertThat(putObjectResult, notNullValue());
@@ -93,10 +93,10 @@ public class AwsStorageServiceTest {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
-        .file(file)
+        .files(files)
         .build();
-    when(file.getOriginalFilename()).thenReturn(fileName);
-    when(file.getInputStream()).thenReturn(inputStream);
+    when(files.get(0).getOriginalFilename()).thenReturn(fileName);
+    when(files.get(0).getInputStream()).thenReturn(inputStream);
     when(amazonS3.putObject(any())).thenThrow(AmazonServiceException.class);
     Assertions.assertThrows(AwsStorageException.class, () -> {
       awsStorageService.upload(storageDto);

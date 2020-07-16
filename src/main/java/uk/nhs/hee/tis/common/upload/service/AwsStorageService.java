@@ -8,13 +8,16 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
+import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
@@ -28,24 +31,28 @@ public class AwsStorageService {
   @Autowired
   private AmazonS3 amazonS3;
 
-  public PutObjectResult upload(final StorageDto storageDto) {
+  public List<PutObjectResult> upload(final StorageDto storageDto) {
     final var bucketName = storageDto.getBucketName();
     final var folderPath = storageDto.getFolderPath();
-    final var file = storageDto.getFile();
+    final var files = storageDto.getFiles();
 
+    ArrayList<PutObjectResult> results= new ArrayList<PutObjectResult>();
+    createBucketIfNotExist(bucketName);
+    for (MultipartFile file : files) {
     try {
-      createBucketIfNotExist(bucketName);
       final var key = format("%s/%s", folderPath, file.getOriginalFilename());
       final var metadata = new ObjectMetadata();
       metadata.addUserMetadata(USER_METADATA_FILE_NAME, file.getOriginalFilename());
       metadata.addUserMetadata(USER_METADATA_FILE_TYPE, getExtension(file.getOriginalFilename()));
       final var request = new PutObjectRequest(bucketName, key, file.getInputStream(), metadata);
       log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
-      return amazonS3.putObject(request);
+      results.add(amazonS3.putObject(request));
     } catch (Exception e) {
       log.error("Fail to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName);
       throw new AwsStorageException(e.getMessage());
     }
+    }
+    return results;
   }
 
   public byte[] download(final StorageDto storageDto) {
