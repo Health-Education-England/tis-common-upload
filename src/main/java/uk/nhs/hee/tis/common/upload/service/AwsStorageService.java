@@ -1,6 +1,7 @@
 package uk.nhs.hee.tis.common.upload.service;
 
 import static java.lang.String.format;
+import static java.util.stream.Collectors.toList;
 import static org.apache.commons.io.FilenameUtils.getExtension;
 
 import com.amazonaws.services.s3.AmazonS3;
@@ -8,16 +9,12 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
-import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
-import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
@@ -36,22 +33,23 @@ public class AwsStorageService {
     final var folderPath = storageDto.getFolderPath();
     final var files = storageDto.getFiles();
 
-    ArrayList<PutObjectResult> results= new ArrayList<PutObjectResult>();
     createBucketIfNotExist(bucketName);
-    for (MultipartFile file : files) {
-    try {
-      final var key = format("%s/%s", folderPath, file.getOriginalFilename());
-      final var metadata = new ObjectMetadata();
-      metadata.addUserMetadata(USER_METADATA_FILE_NAME, file.getOriginalFilename());
-      metadata.addUserMetadata(USER_METADATA_FILE_TYPE, getExtension(file.getOriginalFilename()));
-      final var request = new PutObjectRequest(bucketName, key, file.getInputStream(), metadata);
-      log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
-      results.add(amazonS3.putObject(request));
-    } catch (Exception e) {
-      log.error("Fail to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName);
-      throw new AwsStorageException(e.getMessage());
-    }
-    }
+
+    final var results = files.stream().map(file -> {
+      try {
+        final var key = format("%s/%s", folderPath, file.getOriginalFilename());
+        final var metadata = new ObjectMetadata();
+        metadata.addUserMetadata(USER_METADATA_FILE_NAME, file.getOriginalFilename());
+        metadata.addUserMetadata(USER_METADATA_FILE_TYPE, getExtension(file.getOriginalFilename()));
+        final var request = new PutObjectRequest(bucketName, key, file.getInputStream(), metadata);
+        log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
+        return amazonS3.putObject(request);
+      } catch (Exception e) {
+        log.error("Fail to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName);
+        throw new AwsStorageException(e.getMessage());
+      }
+    }).collect(toList());
+
     return results;
   }
 
@@ -78,11 +76,24 @@ public class AwsStorageService {
           .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
       final var fileSummaries = listObjects.getObjectSummaries().stream().map(summary -> {
         return buildFileSummary(summary);
-      }).collect(Collectors.toList());
+      }).collect(toList());
       return fileSummaries;
     } catch (Exception e) {
       log.error("Fail to list files from bucket: {} with folderPath: {}",
           storageDto.getBucketName(), storageDto.getFolderPath());
+      throw new AwsStorageException(e.getMessage());
+    }
+  }
+
+  public void delete(final StorageDto storageDto) {
+    try {
+      log.info("Remove file: {} from bucket: {} with key: {}", storageDto.getKey(),
+          storageDto.getBucketName(), storageDto.getKey());
+      amazonS3.deleteObject(storageDto.getBucketName(), storageDto.getKey());
+      log.info("File is removed successfully.");
+    } catch (Exception e) {
+      log.error("Fail to delete file from bucket: {} with key: {}",
+          storageDto.getBucketName(), storageDto.getKey());
       throw new AwsStorageException(e.getMessage());
     }
   }
@@ -103,18 +114,5 @@ public class AwsStorageService {
         .fileName(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_NAME))
         .fileType(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE))
         .build();
-  }
-
-  public void delete(final StorageDto storageDto) {
-    try {
-      log.info("Remove file: {} from bucket: {} with key: {}", storageDto.getKey(),
-          storageDto.getBucketName(), storageDto.getKey());
-      amazonS3.deleteObject(storageDto.getBucketName(), storageDto.getKey());
-      log.info("File is removed successfully.");
-    } catch (Exception e) {
-      log.error("Fail to delete file from bucket: {} with key: {}",
-          storageDto.getBucketName(), storageDto.getKey());
-      throw new AwsStorageException(e.getMessage());
-    }
   }
 }

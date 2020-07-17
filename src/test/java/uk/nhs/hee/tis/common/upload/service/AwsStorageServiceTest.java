@@ -2,10 +2,11 @@ package uk.nhs.hee.tis.common.upload.service;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
-import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.core.Is.is;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.amazonaws.AmazonServiceException;
@@ -30,8 +31,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 public class AwsStorageServiceTest {
@@ -45,7 +44,10 @@ public class AwsStorageServiceTest {
   private AmazonS3 amazonS3;
 
   @Mock
-  private List<MultipartFile> files;
+  private MultipartFile file1;
+
+  @Mock
+  private MultipartFile file2;
 
   @Mock
   private InputStream inputStream;
@@ -79,15 +81,16 @@ public class AwsStorageServiceTest {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
-        .files(files)
+        .files(List.of(file1, file2))
         .build();
-    for (int i=0; i<files.size(); i++) {
-      when(files.get(i).getOriginalFilename()).thenReturn(fileName);
-      when(files.get(i).getInputStream()).thenReturn(inputStream);
-      when(amazonS3.putObject(any())).thenReturn(result);
-      final var putObjectResult = awsStorageService.upload(storageDto);
-      assertThat(putObjectResult, notNullValue());
-    }
+
+    when(file1.getOriginalFilename()).thenReturn(fileName);
+    when(file2.getOriginalFilename()).thenReturn(fileName);
+    when(file1.getInputStream()).thenReturn(inputStream);
+    when(file2.getInputStream()).thenReturn(inputStream);
+    when(amazonS3.putObject(any())).thenReturn(result);
+    final var putObjectResult = awsStorageService.upload(storageDto);
+    assertThat(putObjectResult, hasSize(2));
   }
 
   @Test
@@ -95,16 +98,13 @@ public class AwsStorageServiceTest {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
-        .files(files)
+        .files(List.of(file1))
         .build();
-    for (int i=0; i<files.size(); i++) {
-      when(files.get(i).getOriginalFilename()).thenReturn(fileName);
-      when(files.get(i).getInputStream()).thenReturn(inputStream);
-      when(amazonS3.putObject(any())).thenThrow(AmazonServiceException.class);
-      Assertions.assertThrows(AwsStorageException.class, () -> {
-        awsStorageService.upload(storageDto);
-      });
-    }
+
+    when(amazonS3.putObject(any())).thenThrow(AmazonServiceException.class);
+    Assertions.assertThrows(AwsStorageException.class, () -> {
+      awsStorageService.upload(storageDto);
+    });
   }
 
   @Test
