@@ -30,6 +30,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 public class AwsStorageServiceTest {
@@ -182,7 +184,24 @@ public class AwsStorageServiceTest {
     Assertions.assertThrows(AwsStorageException.class, () -> {
       awsStorageService.listFiles(storageDto);
     });
+  }
 
+  @Test
+  public void shouldDeleteFileFromS3() {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
+        .build();
+    awsStorageService.delete(storageDto);
+    verify(amazonS3).deleteObject(bucketName, key);
+  }
+
+  @Test
+  public void shouldThrowExceptionWhenFailToDeleteFile() {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
+        .build();
+    doThrow(AmazonServiceException.class).when(amazonS3).deleteObject(bucketName, key);
+    Assertions.assertThrows(AwsStorageException.class, () -> {
+      awsStorageService.delete(storageDto);
+    });
   }
 
 }
