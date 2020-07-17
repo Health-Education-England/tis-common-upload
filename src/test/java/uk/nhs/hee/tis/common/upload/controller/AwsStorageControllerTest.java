@@ -2,6 +2,7 @@ package uk.nhs.hee.tis.common.upload.controller;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
@@ -29,6 +30,7 @@ public class AwsStorageControllerTest {
   private static final String UPLOAD = "/upload";
   private static final String DOWNLOAD = "/download";
   private static final String LIST = "/list";
+  private static final String DELETE = "/delete";
 
   @Autowired
   private MockMvc mockMvc;
@@ -112,6 +114,24 @@ public class AwsStorageControllerTest {
   @Test
   public void listAllFilesShouldThrowExceptionWhenFolderPathNotProvided() throws Exception {
     this.mockMvc.perform(get(STORAGE_URL + LIST)
+        .param("bucketName", "test-bucket"))
+        .andExpect(status().is4xxClientError());
+  }
+
+  @Test
+  public void shouldDeleteFile() throws Exception {
+    final var key = "1/concern/test.txt";
+    final String content = "[" + key + "] deleted successfully.";
+    this.mockMvc.perform(delete(STORAGE_URL + DELETE)
+        .param("bucketName", "test-bucket")
+        .param("key", "1/concern/test.txt"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(content));
+  }
+
+  @Test
+  public void deleteShouldThrowExceptionWhenKeyIsMissing() throws Exception {
+    this.mockMvc.perform(get(STORAGE_URL + DELETE)
         .param("bucketName", "test-bucket"))
         .andExpect(status().is4xxClientError());
   }

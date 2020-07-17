@@ -97,4 +97,17 @@ public class AwsStorageService {
         .fileType(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE))
         .build();
   }
+
+  public void delete(final StorageDto storageDto) {
+    try {
+      log.info("Remove file: {} from bucket: {} with key: {}", storageDto.getKey(),
+          storageDto.getBucketName(), storageDto.getKey());
+      amazonS3.deleteObject(storageDto.getBucketName(), storageDto.getKey());
+      log.info("File is removed successfully.");
+    } catch (Exception e) {
+      log.error("Fail to delete file from bucket: {} with key: {}",
+          storageDto.getBucketName(), storageDto.getKey());
+      throw new AwsStorageException(e.getMessage());
+    }
+  }
 }
