@@ -4,8 +4,6 @@ server:
     context-path: /common-upload
 
 logging:
-  level:
-    com.transformuk: ${LOGGING_LEVEL:INFO}
   file:
     name: ${LOG_DIR:${HOME}}/common-upload.log
 
@@ -27,7 +25,7 @@ app:
   aws:
     access:
       key:
-        id: ${AWS_ACCESS_KEY:#{null}}
+        id: ${AWS_ACCESS_KEY_ID:#{null}}
     secret:
       access:
         key: ${AWS_SECRET_ACCESS_KEY:#{null}}
