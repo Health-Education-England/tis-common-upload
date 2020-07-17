@@ -58,7 +58,7 @@ public class AwsStorageControllerTest {
 
   @Test
   public void shouldUploadFile() throws Exception {
-    final var file = new MockMultipartFile("file", "test.txt",
+    final var file = new MockMultipartFile("files", "test.txt",
         "text/plain", "Spring Framework".getBytes());
 
     this.mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
@@ -69,8 +69,23 @@ public class AwsStorageControllerTest {
   }
 
   @Test
+  public void shouldUploadMultipleFiles() throws Exception {
+    final var file1 = new MockMultipartFile("files", "test1.txt",
+        "text/plain", "Spring Framework".getBytes());
+    final var file2 = new MockMultipartFile("files", "test2.txt",
+        "text/plain", "Spring Framework".getBytes());
+
+    this.mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
+        .file(file1)
+        .file(file2)
+        .param("bucketName", bucketName)
+        .param("folderPath", folderPath))
+        .andExpect(status().isOk());
+  }
+
+  @Test
   public void uploadFileShouldThrowExceptionWhenNoBucketNameProvided() throws Exception {
-    final var file = new MockMultipartFile("file", "test.txt",
+    final var file = new MockMultipartFile("files", "test.txt",
         "text/plain", "Spring Framework".getBytes());
 
     this.mockMvc.perform(multipart(STORAGE_URL + UPLOAD)

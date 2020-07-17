@@ -81,11 +81,13 @@ public class AwsStorageServiceTest {
         .folderPath(folderName)
         .files(files)
         .build();
-    when(files.get(0).getOriginalFilename()).thenReturn(fileName);
-    when(files.get(0).getInputStream()).thenReturn(inputStream);
-    when(amazonS3.putObject(any())).thenReturn(result);
-    final var putObjectResult = awsStorageService.upload(storageDto);
-    assertThat(putObjectResult, notNullValue());
+    for (int i=0; i<files.size(); i++) {
+      when(files.get(i).getOriginalFilename()).thenReturn(fileName);
+      when(files.get(i).getInputStream()).thenReturn(inputStream);
+      when(amazonS3.putObject(any())).thenReturn(result);
+      final var putObjectResult = awsStorageService.upload(storageDto);
+      assertThat(putObjectResult, notNullValue());
+    }
   }
 
   @Test
@@ -95,12 +97,14 @@ public class AwsStorageServiceTest {
         .folderPath(folderName)
         .files(files)
         .build();
-    when(files.get(0).getOriginalFilename()).thenReturn(fileName);
-    when(files.get(0).getInputStream()).thenReturn(inputStream);
-    when(amazonS3.putObject(any())).thenThrow(AmazonServiceException.class);
-    Assertions.assertThrows(AwsStorageException.class, () -> {
-      awsStorageService.upload(storageDto);
-    });
+    for (int i=0; i<files.size(); i++) {
+      when(files.get(i).getOriginalFilename()).thenReturn(fileName);
+      when(files.get(i).getInputStream()).thenReturn(inputStream);
+      when(amazonS3.putObject(any())).thenThrow(AmazonServiceException.class);
+      Assertions.assertThrows(AwsStorageException.class, () -> {
+        awsStorageService.upload(storageDto);
+      });
+    }
   }
 
   @Test
