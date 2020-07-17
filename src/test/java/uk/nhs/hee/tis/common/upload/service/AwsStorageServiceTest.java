@@ -3,6 +3,7 @@ package uk.nhs.hee.tis.common.upload.service;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.core.Is.is;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -10,6 +11,7 @@ import static org.mockito.Mockito.when;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
@@ -51,6 +53,9 @@ public class AwsStorageServiceTest {
 
   @Mock
   private ObjectListing objectListing;
+
+  @Mock
+  private ObjectMetadata metadata;
 
   private String fileName;
   private String bucketName;
@@ -132,11 +137,38 @@ public class AwsStorageServiceTest {
     s3ObjectSummary.setKey(key);
     when(amazonS3.listObjects(bucketName, folderName + "/")).thenReturn(objectListing);
     when(objectListing.getObjectSummaries()).thenReturn(List.of(s3ObjectSummary));
+    when(amazonS3.getObjectMetadata(bucketName, key)).thenReturn(metadata);
+    when(metadata.getUserMetaDataOf("name")).thenReturn("test.txt");
+    when(metadata.getUserMetaDataOf("type")).thenReturn("txt");
 
     final var objectSummaries = awsStorageService.listFiles(storageDto);
     assertThat(objectSummaries, hasSize(1));
     assertThat(objectSummaries.get(0).getBucketName(), is(bucketName));
     assertThat(objectSummaries.get(0).getKey(), is(key));
+    assertThat(objectSummaries.get(0).getFileName(), is("test.txt"));
+    assertThat(objectSummaries.get(0).getFileType(), is("txt"));
+  }
+
+  @Test
+  public void shouldListFilesFromS3WithoutMetadata() {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
+        .build();
+    final var key = folderName + "/test.txt";
+    final var s3ObjectSummary = new S3ObjectSummary();
+    s3ObjectSummary.setBucketName(bucketName);
+    s3ObjectSummary.setKey(key);
+    when(amazonS3.listObjects(bucketName, folderName + "/")).thenReturn(objectListing);
+    when(objectListing.getObjectSummaries()).thenReturn(List.of(s3ObjectSummary));
+    when(amazonS3.getObjectMetadata(bucketName, key)).thenReturn(metadata);
+    when(metadata.getUserMetaDataOf("name")).thenReturn(null);
+    when(metadata.getUserMetaDataOf("type")).thenReturn(null);
+
+    final var objectSummaries = awsStorageService.listFiles(storageDto);
+    assertThat(objectSummaries, hasSize(1));
+    assertThat(objectSummaries.get(0).getBucketName(), is(bucketName));
+    assertThat(objectSummaries.get(0).getKey(), is(key));
+    assertThat(objectSummaries.get(0).getFileName(), is(nullValue()));
+    assertThat(objectSummaries.get(0).getFileType(), is(nullValue()));
   }
 
   @Test
