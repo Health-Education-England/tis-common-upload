@@ -1,7 +1,6 @@
 package uk.nhs.hee.tis.common.upload.service;
 
 import static java.lang.String.format;
-import static java.util.stream.Collectors.toList;
 import static org.apache.commons.io.FilenameUtils.getExtension;
 
 import com.amazonaws.services.s3.AmazonS3;
@@ -10,6 +9,7 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import java.util.List;
+import java.util.stream.Collectors;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.io.IOUtils;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -28,29 +28,24 @@ public class AwsStorageService {
   @Autowired
   private AmazonS3 amazonS3;
 
-  public List<PutObjectResult> upload(final StorageDto storageDto) {
+  public PutObjectResult upload(final StorageDto storageDto) {
     final var bucketName = storageDto.getBucketName();
     final var folderPath = storageDto.getFolderPath();
-    final var files = storageDto.getFiles();
+    final var file = storageDto.getFile();
 
-    createBucketIfNotExist(bucketName);
-
-    final var results = files.stream().map(file -> {
-      try {
-        final var key = format("%s/%s", folderPath, file.getOriginalFilename());
-        final var metadata = new ObjectMetadata();
-        metadata.addUserMetadata(USER_METADATA_FILE_NAME, file.getOriginalFilename());
-        metadata.addUserMetadata(USER_METADATA_FILE_TYPE, getExtension(file.getOriginalFilename()));
-        final var request = new PutObjectRequest(bucketName, key, file.getInputStream(), metadata);
-        log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
-        return amazonS3.putObject(request);
-      } catch (Exception e) {
-        log.error("Fail to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName);
-        throw new AwsStorageException(e.getMessage());
-      }
-    }).collect(toList());
-
-    return results;
+    try {
+      createBucketIfNotExist(bucketName);
+      final var key = format("%s/%s", folderPath, file.getOriginalFilename());
+      final var metadata = new ObjectMetadata();
+      metadata.addUserMetadata(USER_METADATA_FILE_NAME, file.getOriginalFilename());
+      metadata.addUserMetadata(USER_METADATA_FILE_TYPE, getExtension(file.getOriginalFilename()));
+      final var request = new PutObjectRequest(bucketName, key, file.getInputStream(), metadata);
+      log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
+      return amazonS3.putObject(request);
+    } catch (Exception e) {
+      log.error("Fail to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName);
+      throw new AwsStorageException(e.getMessage());
+    }
   }
 
   public byte[] download(final StorageDto storageDto) {
@@ -76,7 +71,7 @@ public class AwsStorageService {
           .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
       final var fileSummaries = listObjects.getObjectSummaries().stream().map(summary -> {
         return buildFileSummary(summary);
-      }).collect(toList());
+      }).collect(Collectors.toList());
       return fileSummaries;
     } catch (Exception e) {
       log.error("Fail to list files from bucket: {} with folderPath: {}",
