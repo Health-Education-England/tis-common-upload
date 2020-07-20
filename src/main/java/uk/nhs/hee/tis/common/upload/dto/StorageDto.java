@@ -1,6 +1,7 @@
 package uk.nhs.hee.tis.common.upload.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,6 +18,6 @@ public class StorageDto {
   private String bucketName;
   private String folderPath;
   private String key;
-  private MultipartFile file;
+  private List<MultipartFile> files;
 
 }
