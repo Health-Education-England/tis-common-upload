@@ -5,8 +5,8 @@ TIS common upload to be used for upload files in S3.
 
 ## TODO
  - Provide `SENTRY_DSN` and `SENTRY_ENVIRONMENT` as environmental variables
-   during deployment.
- - Add repository to Dependabot.  
+   during deployment and need to make the `SENTRY_ENVIRONMENT` dynamic in the future.
+ - Add repository to Dependabot. 
    
 ## Workflow
 The `CI/CD Workflow` is triggered on push to any branch.
