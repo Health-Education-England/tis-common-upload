@@ -39,7 +39,7 @@ public class AwsStorageController {
 
     log.info("Request receive to upload file: {}", storageDto);
     if (Objects.nonNull(storageDto.getBucketName()) && Objects.nonNull(storageDto.getFolderPath())
-        && Objects.nonNull(storageDto.getFiles())) {
+        && Objects.nonNull(storageDto.getFiles()) && !storageDto.getFiles().isEmpty()) {
       final var response = awsStorageService.upload(storageDto);
       return ResponseEntity.ok(response);
     } else {
