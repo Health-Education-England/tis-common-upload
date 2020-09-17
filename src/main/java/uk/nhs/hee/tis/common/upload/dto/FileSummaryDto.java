@@ -1,6 +1,7 @@
 package uk.nhs.hee.tis.common.upload.dto;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import java.util.Map;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -17,5 +18,5 @@ public class FileSummaryDto {
   private String key;
   private String fileName;
   private String fileType;
-
+  private Map<String, String> customMetadata;
 }

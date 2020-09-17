@@ -21,7 +21,7 @@ public class AwsS3Config {
   private String awsSecretAccessKey;
 
   @Bean
-  public  AWSCredentialsProvider credentialsProvider() {
+  public AWSCredentialsProvider credentialsProvider() {
     final var basic = new BasicAWSCredentials(this.awsAccessKeyId, this.awsSecretAccessKey);
     return new AWSStaticCredentialsProvider(basic);
   }

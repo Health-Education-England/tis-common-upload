@@ -70,12 +70,12 @@ public class AwsStorageService {
     }
   }
 
-  public List<FileSummaryDto> listFiles(final StorageDto storageDto) {
+  public List<FileSummaryDto> listFiles(final StorageDto storageDto, boolean includeMetadata) {
     try {
       final var listObjects = amazonS3
           .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
       final var fileSummaries = listObjects.getObjectSummaries().stream().map(summary -> {
-        return buildFileSummary(summary);
+        return buildFileSummary(summary, includeMetadata);
       }).collect(toList());
       return fileSummaries;
     } catch (Exception e) {
@@ -104,7 +104,8 @@ public class AwsStorageService {
     }
   }
 
-  private FileSummaryDto buildFileSummary(final S3ObjectSummary summary) {
+  private FileSummaryDto buildFileSummary(final S3ObjectSummary summary,
+      boolean includeRawMetadata) {
     final var objectMetadata = amazonS3
         .getObjectMetadata(summary.getBucketName(), summary.getKey());
     log.debug("Metadata details for file:{}, Metadata: {}", summary.getKey(), objectMetadata);
@@ -113,6 +114,7 @@ public class AwsStorageService {
         .key(summary.getKey())
         .fileName(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_NAME))
         .fileType(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE))
+        .customMetadata(includeRawMetadata ? objectMetadata.getUserMetadata() : null)
         .build();
   }
 }

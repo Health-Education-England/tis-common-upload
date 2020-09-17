@@ -77,16 +77,25 @@ public class AwsStorageController {
     }
   }
 
+  /**
+   * List the contents of a folder.
+   *
+   * @param bucketName            name of the bucket
+   * @param folderPath            name of the folder
+   * @param includeCustomMetaData include all custom metadata
+   * @return a list of the objects at the requested location
+   */
   @GetMapping("/list")
   public ResponseEntity listFiles(@RequestParam("bucketName") final String bucketName,
-      @RequestParam("folderPath") final String folderPath) {
+      @RequestParam("folderPath") final String folderPath,
+      @RequestParam(value = "includeCustomMetadata", required = false) boolean includeCustomMetaData) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(folderPath)) {
       log.info("Request receive to download files from bucket: {} and folder location: {}",
           bucketName, folderPath);
       final var storageDto = StorageDto.builder().bucketName(bucketName)
           .folderPath(folderPath).build();
-      final var objectSummaries = awsStorageService.listFiles(storageDto);
+      final var objectSummaries = awsStorageService.listFiles(storageDto, includeCustomMetaData);
       return ResponseEntity.ok().body(objectSummaries);
     } else {
       throw new AwsStorageException(
