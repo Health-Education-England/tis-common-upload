@@ -117,7 +117,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldHandleExceptionIfUploadFails() throws IOException {
+  public void shouldHandleExceptionIfUploadFails() {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
@@ -125,9 +125,7 @@ public class AwsStorageServiceTest {
         .build();
 
     when(amazonS3.putObject(any())).thenThrow(AmazonServiceException.class);
-    Assertions.assertThrows(AwsStorageException.class, () -> {
-      awsStorageService.upload(storageDto);
-    });
+    Assertions.assertThrows(AwsStorageException.class, () -> awsStorageService.upload(storageDto));
   }
 
   @Test
@@ -151,9 +149,7 @@ public class AwsStorageServiceTest {
     s3Object.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
     when(amazonS3.getObject(bucketName, key)).thenThrow(AmazonServiceException.class);
 
-    Assertions.assertThrows(AwsStorageException.class, () -> {
-      awsStorageService.download(storageDto);
-    });
+    Assertions.assertThrows(AwsStorageException.class, () -> awsStorageService.download(storageDto));
   }
 
   @Test
@@ -211,9 +207,7 @@ public class AwsStorageServiceTest {
         .build();
     when(amazonS3.listObjects(bucketName, folderName + "/"))
         .thenThrow(AmazonServiceException.class);
-    Assertions.assertThrows(AwsStorageException.class, () -> {
-      awsStorageService.listFiles(storageDto, false);
-    });
+    Assertions.assertThrows(AwsStorageException.class, () -> awsStorageService.listFiles(storageDto, false));
   }
 
   @Test
@@ -229,9 +223,7 @@ public class AwsStorageServiceTest {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
         .build();
     doThrow(AmazonServiceException.class).when(amazonS3).deleteObject(bucketName, key);
-    Assertions.assertThrows(AwsStorageException.class, () -> {
-      awsStorageService.delete(storageDto);
-    });
+    Assertions.assertThrows(AwsStorageException.class, () -> awsStorageService.delete(storageDto));
   }
 
 }

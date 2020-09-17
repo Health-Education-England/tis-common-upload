@@ -35,7 +35,7 @@ public class AwsStorageService {
 
     createBucketIfNotExist(bucketName);
 
-    final var results = files.stream().map(file -> {
+    return files.stream().map(file -> {
       try {
         final var key = format("%s/%s", folderPath, file.getOriginalFilename());
         final var metadata = new ObjectMetadata();
@@ -49,8 +49,6 @@ public class AwsStorageService {
         throw new AwsStorageException(e.getMessage());
       }
     }).collect(toList());
-
-    return results;
   }
 
   public byte[] download(final StorageDto storageDto) {
@@ -74,10 +72,8 @@ public class AwsStorageService {
     try {
       final var listObjects = amazonS3
           .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
-      final var fileSummaries = listObjects.getObjectSummaries().stream().map(summary -> {
-        return buildFileSummary(summary, includeMetadata);
-      }).collect(toList());
-      return fileSummaries;
+      return listObjects.getObjectSummaries().stream()
+          .map(summary -> buildFileSummary(summary, includeMetadata)).collect(toList());
     } catch (Exception e) {
       log.error("Fail to list files from bucket: {} with folderPath: {}",
           storageDto.getBucketName(), storageDto.getFolderPath());
