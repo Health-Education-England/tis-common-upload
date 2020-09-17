@@ -11,7 +11,7 @@ server:
 
 logging:
   level:
-    com.transformuk: ${LOGGING_LEVEL:INFO}
+    uk.nhs.hee.tis: ${LOGGING_LEVEL:INFO}
   file:
     name: ${LOG_DIR:${HOME}}/common-upload.log
 
