@@ -35,7 +35,7 @@ public class AwsStorageService {
 
     createBucketIfNotExist(bucketName);
 
-    final var results = files.stream().map(file -> {
+    return files.stream().map(file -> {
       try {
         final var key = format("%s/%s", folderPath, file.getOriginalFilename());
         final var metadata = new ObjectMetadata();
@@ -49,8 +49,6 @@ public class AwsStorageService {
         throw new AwsStorageException(e.getMessage());
       }
     }).collect(toList());
-
-    return results;
   }
 
   public byte[] download(final StorageDto storageDto) {
@@ -70,14 +68,12 @@ public class AwsStorageService {
     }
   }
 
-  public List<FileSummaryDto> listFiles(final StorageDto storageDto) {
+  public List<FileSummaryDto> listFiles(final StorageDto storageDto, boolean includeMetadata) {
     try {
       final var listObjects = amazonS3
           .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
-      final var fileSummaries = listObjects.getObjectSummaries().stream().map(summary -> {
-        return buildFileSummary(summary);
-      }).collect(toList());
-      return fileSummaries;
+      return listObjects.getObjectSummaries().stream()
+          .map(summary -> buildFileSummary(summary, includeMetadata)).collect(toList());
     } catch (Exception e) {
       log.error("Fail to list files from bucket: {} with folderPath: {}",
           storageDto.getBucketName(), storageDto.getFolderPath());
@@ -104,7 +100,8 @@ public class AwsStorageService {
     }
   }
 
-  private FileSummaryDto buildFileSummary(final S3ObjectSummary summary) {
+  private FileSummaryDto buildFileSummary(final S3ObjectSummary summary,
+      boolean includeRawMetadata) {
     final var objectMetadata = amazonS3
         .getObjectMetadata(summary.getBucketName(), summary.getKey());
     log.debug("Metadata details for file:{}, Metadata: {}", summary.getKey(), objectMetadata);
@@ -113,6 +110,7 @@ public class AwsStorageService {
         .key(summary.getKey())
         .fileName(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_NAME))
         .fileType(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE))
+        .customMetadata(includeRawMetadata ? objectMetadata.getUserMetadata() : null)
         .build();
   }
 }
