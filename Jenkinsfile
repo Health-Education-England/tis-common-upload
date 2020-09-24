@@ -29,7 +29,6 @@ node {
   }
 
   if (env.BRANCH_NAME != "master") {
-    currentBuild.result = 'ABORTED'
     return
   }
 
