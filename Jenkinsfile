@@ -7,8 +7,17 @@ node {
   def branchName = null
   def changeId = null
 
+  println "======================"
+  println "Environment debug:\n${env}"
+  println "======================"
+
+  println "======================"
+  println "System environment debug:"
+  echo sh(returnStdout: true, script: 'env')
+  println "======================"
+
+
   stage('Checkout') {
-    version = sh(returnStdout: true, script: "git log -n 1 --pretty=format:'%H'").trim()
     //clone the repo
     if(env.BRANCH_NAME.startsWith('PR-')) {
       branchName = "origin/" + env.CHANGE_ID
@@ -25,6 +34,41 @@ node {
     //make sure we have the latest
     if(!env.BRANCH_NAME.startsWith('PR-')) {
       sh """git pull origin ${branchName}"""
+    }
+    version = sh(returnStdout: true, script: "git log -n 1 --pretty=format:'%H'").trim()
+  }
+
+  stage('JFDI') {
+    stage('Stage Approval') {
+      timeout(time:30, unit:'MINUTES') {
+        input message: 'Deploy LATEST image to stage?', ok: 'YOLO!'
+      }
+    }
+    stage('STAGE') {
+      sh """ansible-playbook -i ${env.DEVOPS_BASE}/ansible/inventory/stage ${env.DEVOPS_BASE}/ansible/${serviceName}.yml --extra-vars="{'versions': {'${serviceName}': 'latest'}}" """
+      def httpStatus=sh(returnStdout: true, script: """sleep 10; curl -m 300 -s -o /dev/null -w "%{http_code}" ${HEALTHCHECK_SERVER_STAGE}:${healthcheckHttpPort}${healthcheckEndpoint}""").trim()
+      if("200".equals(httpStatus)) {
+        println "STAGE healthcheck is OK"
+      } else {
+        throw new Exception("health check failed on STAGE with http status: ${httpStatus}")
+      }
+    }
+
+    stage('Prod Approval') {
+      timeout(time:5, unit:'HOURS') {
+        input message: 'Deploy LATEST image to production?', ok: 'Deploy!'
+      }
+    }
+    stage('PROD') {
+          sh """ansible-playbook -i ${env.DEVOPS_BASE}/ansible/inventory/prod ${env.DEVOPS_BASE}/ansible/${serviceName}.yml --extra-vars="{'versions': {'${serviceName}': 'latest'}}" """
+          //Healthcheck
+          def httpStatus=sh(returnStdout: true, script: """sleep 10; curl -m 300 -s -o /dev/null -w "%{http_code}" ${HEALTHCHECK_SERVER_PROD}:${healthcheckHttpPort}${healthcheckEndpoint}""").trim()
+          if("200".equals(httpStatus)) {
+              println "PROD healthcheck is OK"
+          } else {
+              slackSend channel: '#monitoring-prod', color: 'danger', message: "Jenkins failed healthcheck of ${serviceName} on PROD after deploying build No.${env.BUILD_NUMBER}!"
+              throw new Exception("health check failed on PROD with http status: ${httpStatus}")
+          }
     }
   }
 
