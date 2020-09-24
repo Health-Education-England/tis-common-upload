@@ -88,7 +88,8 @@ public class AwsStorageController {
   @GetMapping("/list")
   public ResponseEntity listFiles(@RequestParam("bucketName") final String bucketName,
       @RequestParam("folderPath") final String folderPath,
-      @RequestParam(value = "includeCustomMetadata", required = false) boolean includeCustomMetaData) {
+      @RequestParam(value = "includeCustomMetadata", required = false)
+      final boolean includeCustomMetaData) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(folderPath)) {
       log.info("Request receive to download files from bucket: {} and folder location: {}",
