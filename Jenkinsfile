@@ -9,8 +9,8 @@ node {
 
   println "======================"
   println "Environment debug:\n${env}"
-  println "======================"
-
+  println "----------------------"
+  echo sh(returnStdout: true, script: 'env')
   println "======================"
   println "System environment debug:"
   echo sh(returnStdout: true, script: 'env')
