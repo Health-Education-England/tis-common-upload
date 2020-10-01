@@ -78,6 +78,25 @@ public class AwsStorageController {
   }
 
   /**
+   * Get an object as a formatted string.
+   *
+   * @param bucketName name of the bucket
+   * @param key        file location with name
+   * @return Response entity with status code 200 and the object
+   */
+  @GetMapping("/data")
+  public ResponseEntity<String> getData(@RequestParam("bucketName") final String bucketName,
+      @RequestParam("key") final String key) {
+
+    log.info("Request receive to download file: {} from bucket: {}", key, bucketName);
+    final var storageDto = StorageDto.builder().bucketName(bucketName)
+        .key(key).build();
+    String responseJson = awsStorageService.getData(storageDto);
+    return ResponseEntity
+        .ok().body(responseJson);
+  }
+
+  /**
    * List the contents of a folder.
    *
    * @param bucketName            name of the bucket
@@ -88,7 +107,7 @@ public class AwsStorageController {
   @GetMapping("/list")
   public ResponseEntity listFiles(@RequestParam("bucketName") final String bucketName,
       @RequestParam("folderPath") final String folderPath,
-      @RequestParam(value = "includeCustomMetadata", required = false) boolean includeCustomMetaData) {
+      @RequestParam(value = "includeCustomMetadata", required = false) final boolean includeCustomMetaData) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(folderPath)) {
       log.info("Request receive to download files from bucket: {} and folder location: {}",
@@ -103,6 +122,13 @@ public class AwsStorageController {
     }
   }
 
+  /**
+   * Delete the object identified by `key` in the named bucket.
+   *
+   * @param bucketName            name of the bucket
+   * @param key            key to the object
+   * @return HTTP 200 with conformation message if deleted.
+   */
   @DeleteMapping("/delete")
   public ResponseEntity<String> delete(@RequestParam("bucketName") final String bucketName,
       @RequestParam("key") final String key) {

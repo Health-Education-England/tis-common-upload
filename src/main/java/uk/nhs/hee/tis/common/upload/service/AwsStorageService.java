@@ -8,6 +8,7 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
+import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,10 @@ public class AwsStorageService {
   @Autowired
   private AmazonS3 amazonS3;
 
+  /**
+   * @param storageDto representation of files to be uploaded to S3
+   * @return result of attempts to store the objects
+   */
   public List<PutObjectResult> upload(final StorageDto storageDto) {
     final var bucketName = storageDto.getBucketName();
     final var folderPath = storageDto.getFolderPath();
@@ -51,6 +56,12 @@ public class AwsStorageService {
     }).collect(toList());
   }
 
+  /**
+   * Get the object contents as bytes
+   *
+   * @param storageDto holder for the bucket and object key
+   * @return byte array of the object content
+   */
   public byte[] download(final StorageDto storageDto) {
     try {
       log.info("Download file: {} from bucket: {} with key: {}", storageDto.getKey(),
@@ -68,7 +79,30 @@ public class AwsStorageService {
     }
   }
 
-  public List<FileSummaryDto> listFiles(final StorageDto storageDto, boolean includeMetadata) {
+  /**
+   * Get the object contents as a string
+   *
+   * @param storageDto holder for the bucket and object key
+   * @return text string of the object content
+   */
+  public String getData(StorageDto storageDto) {
+    try (S3Object object = amazonS3.getObject(storageDto.getBucketName(), storageDto.getKey())) {
+      return IOUtils.toString(object.getObjectContent());
+    } catch (Exception e) {
+      log.error("Unable to retrieve object from S3 as a String", e);
+      throw new AwsStorageException(e.getMessage());
+    }
+  }
+
+  /**
+   * List objects in a bucket under a given prefix
+   *
+   * @param storageDto      holder for the bucket and folderPath (key prefix)
+   * @param includeMetadata whether all custom metadata should be included
+   * @return a list of summaries for objects which were found
+   */
+  public List<FileSummaryDto> listFiles(final StorageDto storageDto,
+      final boolean includeMetadata) {
     try {
       final var listObjects = amazonS3
           .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
@@ -81,6 +115,12 @@ public class AwsStorageService {
     }
   }
 
+  /**
+   * Delete the object identified by a key in a bucket
+   *
+   * @param storageDto holder for the bucket and object key
+   * @throws AwsStorageException if there is a problem deleting the object
+   */
   public void delete(final StorageDto storageDto) {
     try {
       log.info("Remove file: {} from bucket: {} with key: {}", storageDto.getKey(),
@@ -101,7 +141,7 @@ public class AwsStorageService {
   }
 
   private FileSummaryDto buildFileSummary(final S3ObjectSummary summary,
-      boolean includeRawMetadata) {
+      boolean includeCustomMetadata) {
     final var objectMetadata = amazonS3
         .getObjectMetadata(summary.getBucketName(), summary.getKey());
     log.debug("Metadata details for file:{}, Metadata: {}", summary.getKey(), objectMetadata);
@@ -110,7 +150,7 @@ public class AwsStorageService {
         .key(summary.getKey())
         .fileName(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_NAME))
         .fileType(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE))
-        .customMetadata(includeRawMetadata ? objectMetadata.getUserMetadata() : null)
+        .customMetadata(includeCustomMetadata ? objectMetadata.getUserMetadata() : null)
         .build();
   }
 }
