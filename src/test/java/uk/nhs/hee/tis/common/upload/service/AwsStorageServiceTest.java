@@ -179,7 +179,8 @@ public class AwsStorageServiceTest {
     when(amazonS3.getObject(bucketName, key)).thenThrow(new AmazonServiceException(
         expectedMessage));
 
-    Throwable actual = assertThrows(AwsStorageException.class, () -> awsStorageService.getData(storageDto));
+    Throwable actual =
+        assertThrows(AwsStorageException.class, () -> awsStorageService.getData(storageDto));
     assertThat(actual.getMessage(), startsWith(expectedMessage));
   }
 

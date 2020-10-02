@@ -30,6 +30,8 @@ public class AwsStorageService {
   private AmazonS3 amazonS3;
 
   /**
+   * Upload files in the bucket with a prefix of folderPath, specified in {@code storageDto}.
+   *
    * @param storageDto representation of files to be uploaded to S3
    * @return result of attempts to store the objects
    */
@@ -57,7 +59,7 @@ public class AwsStorageService {
   }
 
   /**
-   * Get the object contents as bytes
+   * Get the object contents as bytes.
    *
    * @param storageDto holder for the bucket and object key
    * @return byte array of the object content
@@ -80,7 +82,7 @@ public class AwsStorageService {
   }
 
   /**
-   * Get the object contents as a string
+   * Get the object contents as a string.
    *
    * @param storageDto holder for the bucket and object key
    * @return text string of the object content
@@ -95,7 +97,7 @@ public class AwsStorageService {
   }
 
   /**
-   * List objects in a bucket under a given prefix
+   * List objects in a bucket under a given prefix.
    *
    * @param storageDto      holder for the bucket and folderPath (key prefix)
    * @param includeMetadata whether all custom metadata should be included
@@ -116,7 +118,7 @@ public class AwsStorageService {
   }
 
   /**
-   * Delete the object identified by a key in a bucket
+   * Delete the object identified by a key in a bucket.
    *
    * @param storageDto holder for the bucket and object key
    * @throws AwsStorageException if there is a problem deleting the object
@@ -141,7 +143,7 @@ public class AwsStorageService {
   }
 
   private FileSummaryDto buildFileSummary(final S3ObjectSummary summary,
-      boolean includeCustomMetadata) {
+      final boolean includeCustomMetadata) {
     final var objectMetadata = amazonS3
         .getObjectMetadata(summary.getBucketName(), summary.getKey());
     log.debug("Metadata details for file:{}, Metadata: {}", summary.getKey(), objectMetadata);
