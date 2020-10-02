@@ -123,6 +123,13 @@ public class AwsStorageController {
     }
   }
 
+  /**
+   * Delete an object from S3.
+   *
+   * @param bucketName The bucket to find the object in
+   * @param key        The key for the object tod be deleted
+   * @return HTTP OK and message confirming deletion when successful
+   */
   @DeleteMapping("/delete")
   public ResponseEntity<String> delete(@RequestParam("bucketName") final String bucketName,
       @RequestParam("key") final String key) {
