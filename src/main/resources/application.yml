@@ -33,7 +33,7 @@ app:
   aws:
     access:
       key:
-        id: ${AWS_ACCESS_KEY:#{null}}
+        id: ${AWS_ACCESS_KEY:${AWS_ACCESS_KEY_ID:#{null}}}
     secret:
       access:
         key: ${AWS_SECRET_ACCESS_KEY:#{null}}

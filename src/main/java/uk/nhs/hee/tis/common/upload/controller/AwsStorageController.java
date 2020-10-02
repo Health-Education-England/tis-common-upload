@@ -122,13 +122,6 @@ public class AwsStorageController {
     }
   }
 
-  /**
-   * Delete the object identified by `key` in the named bucket.
-   *
-   * @param bucketName            name of the bucket
-   * @param key            key to the object
-   * @return HTTP 200 with conformation message if deleted.
-   */
   @DeleteMapping("/delete")
   public ResponseEntity<String> delete(@RequestParam("bucketName") final String bucketName,
       @RequestParam("key") final String key) {
