@@ -21,6 +21,8 @@
 
 package uk.nhs.hee.tis.common.upload.controller;
 
+import static org.hamcrest.Matchers.equalTo;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
@@ -28,6 +30,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,6 +39,8 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -43,6 +48,8 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
+import uk.nhs.hee.tis.common.upload.dto.StorageDto;
+import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
 
 @ExtendWith(MockitoExtension.class)
@@ -61,6 +68,9 @@ public class AwsStorageControllerTest {
   @MockBean
   private AwsStorageService storageService;
 
+  @Captor
+  private ArgumentCaptor<StorageDto> storageDtoCaptor;
+
   private String folderPath;
   private String bucketName;
   private String key;
@@ -70,7 +80,7 @@ public class AwsStorageControllerTest {
   private ObjectMapper objectMapper = new ObjectMapper();
 
   @BeforeEach
-  public void setup() {
+  void setup() {
     folderPath = "1/concern";
     bucketName = "tis-test-bucket";
     fileName = "test.txt";
@@ -80,11 +90,11 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void shouldUploadFile() throws Exception {
+  void shouldUploadFile() throws Exception {
     final var file = new MockMultipartFile("files", "test.txt",
         "text/plain", "Spring Framework".getBytes());
 
-    this.mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
+    mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
         .file(file)
         .param("bucketName", bucketName)
         .param("folderPath", folderPath))
@@ -92,13 +102,13 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void shouldUploadMultipleFiles() throws Exception {
+  void shouldUploadMultipleFiles() throws Exception {
     final var file1 = new MockMultipartFile("files", "test1.txt",
         "text/plain", "Spring Framework".getBytes());
     final var file2 = new MockMultipartFile("files", "test2.txt",
         "text/plain", "Spring Framework".getBytes());
 
-    this.mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
+    mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
         .file(file1)
         .file(file2)
         .param("bucketName", bucketName)
@@ -107,21 +117,21 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void uploadFileShouldThrowExceptionWhenNoBucketNameProvided() throws Exception {
+  void uploadFileShouldThrowExceptionWhenNoBucketNameProvided() throws Exception {
     final var file = new MockMultipartFile("files", "test.txt",
         "text/plain", "Spring Framework".getBytes());
 
-    this.mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
+    mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
         .file(file)
         .param("folderPath", folderPath))
         .andExpect(status().is4xxClientError());
   }
 
   @Test
-  public void shouldDownloadFile() throws Exception {
+  void shouldDownloadFile() throws Exception {
     final var content = "This is test file";
     when(storageService.download(any())).thenReturn(content.getBytes());
-    this.mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
+    mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
         .param("bucketName", "test-bucket")
         .param("key", "1/concern/test.txt"))
         .andExpect(status().isOk())
@@ -129,22 +139,49 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void downloadFileShouldThrowExceptionWhenNoKeyProvided() throws Exception {
+  void downloadFileShouldThrowExceptionWhenNoKeyProvided() throws Exception {
     when(storageService.download(any())).thenReturn("test".getBytes());
-    this.mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
+    mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
         .param("bucketName", "test-bucket"))
         .andExpect(status().is4xxClientError());
   }
 
   @Test
-  public void shouldListAllFiles() throws Exception {
+  void getDataShouldRespondWithExpectedData() throws Exception {
+    when(storageService.getData(storageDtoCaptor.capture())).thenReturn(
+        "{\"table\": \"Concern\",  \"data\": {\"id\": 40,\"name\": \"Dolore, Harold\"}}");
+    mockMvc.perform(get(STORAGE_URL + "/data")
+        .param("bucketName", bucketName)
+        .param("key", key))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.table", equalTo("Concern")))
+        .andExpect(jsonPath("$.data.id", equalTo(40)))
+        .andExpect(jsonPath("$.data.name", equalTo("Dolore, Harold")));
+    var actualStorageDto = storageDtoCaptor.getValue();
+    assertEquals(bucketName, actualStorageDto.getBucketName());
+    assertEquals(key, actualStorageDto.getKey());
+  }
+
+  @Test
+  void getDataShouldRespond4xxOnStorageException() throws Exception {
+    when(storageService.getData(storageDtoCaptor.capture()))
+        .thenThrow(new AwsStorageException("Storage Exception"));
+
+    mockMvc.perform(get(STORAGE_URL + "/data")
+        .param("bucketName", bucketName)
+        .param("key", key))
+        .andExpect(status().is4xxClientError());
+  }
+
+  @Test
+  void shouldListAllFiles() throws Exception {
     Map<String, String> defaultMetadataMap = Map.of("key", "value");
     final var fileSummaryDto = FileSummaryDto.builder().bucketName(bucketName).key(key)
         .customMetadata(defaultMetadataMap)
         .fileName(metadataFileName).fileType(metadataFileType).build();
     final var fileSummaryDtoList = List.of(fileSummaryDto);
     when(storageService.listFiles(any(), eq(false))).thenReturn(fileSummaryDtoList);
-    this.mockMvc.perform(get(STORAGE_URL + LIST)
+    mockMvc.perform(get(STORAGE_URL + LIST)
         .param("bucketName", "test-bucket")
         .param("folderPath", "1/concern"))
         .andExpect(status().isOk())
@@ -152,17 +189,17 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void listAllFilesShouldThrowExceptionWhenFolderPathNotProvided() throws Exception {
-    this.mockMvc.perform(get(STORAGE_URL + LIST)
+  void listAllFilesShouldThrowExceptionWhenFolderPathNotProvided() throws Exception {
+    mockMvc.perform(get(STORAGE_URL + LIST)
         .param("bucketName", "test-bucket"))
         .andExpect(status().is4xxClientError());
   }
 
   @Test
-  public void shouldDeleteFile() throws Exception {
+  void shouldDeleteFile() throws Exception {
     final var key = "1/concern/test.txt";
     final String content = "[" + key + "] deleted successfully.";
-    this.mockMvc.perform(delete(STORAGE_URL + DELETE)
+    mockMvc.perform(delete(STORAGE_URL + DELETE)
         .param("bucketName", "test-bucket")
         .param("key", "1/concern/test.txt"))
         .andExpect(status().isOk())
@@ -170,8 +207,8 @@ public class AwsStorageControllerTest {
   }
 
   @Test
-  public void deleteShouldThrowExceptionWhenKeyIsMissing() throws Exception {
-    this.mockMvc.perform(get(STORAGE_URL + DELETE)
+  void deleteShouldThrowExceptionWhenKeyIsMissing() throws Exception {
+    mockMvc.perform(get(STORAGE_URL + DELETE)
         .param("bucketName", "test-bucket"))
         .andExpect(status().is4xxClientError());
   }

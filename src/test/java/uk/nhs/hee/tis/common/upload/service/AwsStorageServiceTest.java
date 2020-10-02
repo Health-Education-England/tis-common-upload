@@ -24,7 +24,10 @@ package uk.nhs.hee.tis.common.upload.service;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
+import static org.hamcrest.Matchers.startsWith;
 import static org.hamcrest.core.Is.is;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
@@ -44,7 +47,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
 import java.util.Map;
-import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -91,7 +93,7 @@ public class AwsStorageServiceTest {
   private String key;
 
   @BeforeEach
-  public void setup() {
+  void setup() {
     fileName = faker.lorem().characters(10);
     bucketName = faker.lorem().characters(10);
     folderName = faker.lorem().characters(10);
@@ -100,7 +102,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldUploadFile() throws IOException {
+  void shouldUploadFile() throws IOException {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
@@ -117,7 +119,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldHandleExceptionIfUploadFails() {
+  void shouldHandleExceptionIfUploadFails() {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
@@ -125,11 +127,11 @@ public class AwsStorageServiceTest {
         .build();
 
     when(amazonS3.putObject(any())).thenThrow(AmazonServiceException.class);
-    Assertions.assertThrows(AwsStorageException.class, () -> awsStorageService.upload(storageDto));
+    assertThrows(AwsStorageException.class, () -> awsStorageService.upload(storageDto));
   }
 
   @Test
-  public void shouldDownloadFileFromS3() {
+  void shouldDownloadFileFromS3() {
     final var storageDto = StorageDto.builder().bucketName(bucketName)
         .key(key).build();
     final var s3Object = new S3Object();
@@ -142,18 +144,48 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldThrowExceptionWhenDownloadFileNotFound() {
+  void shouldThrowExceptionWhenDownloadFileNotFound() {
     final var storageDto = StorageDto.builder().bucketName(bucketName)
         .key(fileName).build();
     final var s3Object = new S3Object();
     s3Object.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
     when(amazonS3.getObject(bucketName, key)).thenThrow(AmazonServiceException.class);
 
-    Assertions.assertThrows(AwsStorageException.class, () -> awsStorageService.download(storageDto));
+    assertThrows(AwsStorageException.class, () -> awsStorageService.download(storageDto));
+  }
+
+
+  @Test
+  void getDataShouldReturnExpectedData() {
+    final StorageDto input = StorageDto.builder().bucketName(bucketName).key(key).build();
+    final S3Object stubbedValue = new S3Object();
+    stubbedValue.setBucketName(bucketName);
+    stubbedValue.setKey(key);
+    stubbedValue.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
+    when(amazonS3.getObject(bucketName, key)).thenReturn(stubbedValue);
+
+    final String actual = awsStorageService.getData(input);
+
+    assertEquals(fileContent, actual);
   }
 
   @Test
-  public void shouldListFilesFromS3() {
+  void getDataShouldWrapException() {
+    final var storageDto = StorageDto.builder().bucketName(bucketName)
+        .key(key).build();
+    final var s3Object = new S3Object();
+    s3Object.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
+    String expectedMessage = "Expected Exception";
+    when(amazonS3.getObject(bucketName, key)).thenThrow(new AmazonServiceException(
+        expectedMessage));
+
+    Throwable actual =
+        assertThrows(AwsStorageException.class, () -> awsStorageService.getData(storageDto));
+    assertThat(actual.getMessage(), startsWith(expectedMessage));
+  }
+
+  @Test
+  void shouldListFilesFromS3() {
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .build();
     final var key = folderName + "/test.txt";
@@ -177,7 +209,7 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldListFilesFromS3WithoutMetadata() {
+  void shouldListFilesFromS3WithoutMetadata() {
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .build();
     final var key = folderName + "/test.txt";
@@ -200,18 +232,18 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldThrowExceptionWhenListNotFound() {
+  void shouldThrowExceptionWhenListNotFound() {
     final var storageDto = StorageDto.builder()
         .bucketName(bucketName)
         .folderPath(folderName)
         .build();
     when(amazonS3.listObjects(bucketName, folderName + "/"))
         .thenThrow(AmazonServiceException.class);
-    Assertions.assertThrows(AwsStorageException.class, () -> awsStorageService.listFiles(storageDto, false));
+    assertThrows(AwsStorageException.class, () -> awsStorageService.listFiles(storageDto, false));
   }
 
   @Test
-  public void shouldDeleteFileFromS3() {
+  void shouldDeleteFileFromS3() {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
         .build();
     awsStorageService.delete(storageDto);
@@ -219,11 +251,11 @@ public class AwsStorageServiceTest {
   }
 
   @Test
-  public void shouldThrowExceptionWhenFailToDeleteFile() {
+  void shouldThrowExceptionWhenFailToDeleteFile() {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
         .build();
     doThrow(AmazonServiceException.class).when(amazonS3).deleteObject(bucketName, key);
-    Assertions.assertThrows(AwsStorageException.class, () -> awsStorageService.delete(storageDto));
+    assertThrows(AwsStorageException.class, () -> awsStorageService.delete(storageDto));
   }
 
 }
