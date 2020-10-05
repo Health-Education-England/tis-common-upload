@@ -21,10 +21,12 @@
 
 package uk.nhs.hee.tis.common.upload.controller;
 
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -97,8 +99,15 @@ public class AwsStorageControllerTest {
     mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
         .file(file)
         .param("bucketName", bucketName)
-        .param("folderPath", folderPath))
+        .param("folderPath", folderPath)
+        .param("customMetadata[key]", "value")
+        .param("customMetadata[uploadDate]", "1992-08-07"))
         .andExpect(status().isOk());
+
+    verify(storageService).upload(storageDtoCaptor.capture());
+    StorageDto expectedDto = StorageDto.builder().bucketName(bucketName).folderPath(folderPath)
+        .files(List.of(file)).customMetadata(Map.of("key", "value", "uploadDate", "1992-08-07")).build();
+    assertThat(storageDtoCaptor.getValue(), equalTo(expectedDto));
   }
 
   @Test
