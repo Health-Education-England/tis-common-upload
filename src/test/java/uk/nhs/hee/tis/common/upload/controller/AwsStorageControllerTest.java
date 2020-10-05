@@ -106,7 +106,8 @@ public class AwsStorageControllerTest {
 
     verify(storageService).upload(storageDtoCaptor.capture());
     StorageDto expectedDto = StorageDto.builder().bucketName(bucketName).folderPath(folderPath)
-        .files(List.of(file)).customMetadata(Map.of("key", "value", "uploadDate", "1992-08-07")).build();
+        .customMetadata(Map.of("key", "value", "uploadDate", "1992-08-07"))
+        .files(List.of(file)).build();
     assertThat(storageDtoCaptor.getValue(), equalTo(expectedDto));
   }
 
