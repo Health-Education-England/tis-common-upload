@@ -190,10 +190,11 @@ public class AwsStorageControllerTest {
         .customMetadata(defaultMetadataMap)
         .fileName(metadataFileName).fileType(metadataFileType).build();
     final var fileSummaryDtoList = List.of(fileSummaryDto);
-    when(storageService.listFiles(any(), eq(false))).thenReturn(fileSummaryDtoList);
+    when(storageService.listFiles(any(), eq(false), eq("interest,highest"))).thenReturn(fileSummaryDtoList);
     mockMvc.perform(get(STORAGE_URL + LIST)
         .param("bucketName", "test-bucket")
-        .param("folderPath", "1/concern"))
+        .param("folderPath", "1/concern")
+        .param("sort", "interest,highest"))
         .andExpect(status().isOk())
         .andExpect(content().string(objectMapper.writeValueAsString(fileSummaryDtoList)));
   }
