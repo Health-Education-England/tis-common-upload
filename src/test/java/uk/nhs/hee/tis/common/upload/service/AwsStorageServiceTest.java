@@ -45,11 +45,15 @@ import com.github.javafaker.Faker;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -66,25 +70,31 @@ public class AwsStorageServiceTest {
   private AwsStorageService awsStorageService;
 
   @Mock
-  private AmazonS3 amazonS3;
+  private AmazonS3 s3Mock;
 
   @Mock
-  private MultipartFile file1;
+  private MultipartFile file1Mock;
 
   @Mock
-  private MultipartFile file2;
+  private MultipartFile file2Mock;
 
   @Mock
-  private InputStream inputStream;
+  private InputStream inputStreamMock;
 
   @Mock
-  private PutObjectResult result;
+  private PutObjectResult resultMock;
 
   @Mock
-  private ObjectListing objectListing;
+  private ObjectListing objectListingMock;
 
   @Mock
-  private ObjectMetadata metadata;
+  private ObjectMetadata metadataMock;
+  @Mock
+  private ObjectMetadata metadataMock2;
+  @Mock
+  private ObjectMetadata metadataMock3;
+  @Mock
+  private ObjectMetadata metadataMock4;
 
   private String fileName;
   private String bucketName;
@@ -103,40 +113,36 @@ public class AwsStorageServiceTest {
 
   @Test
   void shouldUploadFile() throws IOException {
-    final var storageDto = StorageDto.builder()
-        .bucketName(bucketName)
-        .folderPath(folderName)
-        .files(List.of(file1, file2))
-        .build();
+    when(file1Mock.getOriginalFilename()).thenReturn(fileName);
+    when(file2Mock.getOriginalFilename()).thenReturn(fileName);
+    when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
+    when(file2Mock.getInputStream()).thenReturn(inputStreamMock);
+    when(s3Mock.putObject(any())).thenReturn(resultMock);
 
-    when(file1.getOriginalFilename()).thenReturn(fileName);
-    when(file2.getOriginalFilename()).thenReturn(fileName);
-    when(file1.getInputStream()).thenReturn(inputStream);
-    when(file2.getInputStream()).thenReturn(inputStream);
-    when(amazonS3.putObject(any())).thenReturn(result);
+    final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
+        .files(List.of(file1Mock, file2Mock)).build();
     final var putObjectResult = awsStorageService.upload(storageDto);
+
     assertThat(putObjectResult, hasSize(2));
   }
 
   @Test
   void shouldHandleExceptionIfUploadFails() {
-    final var storageDto = StorageDto.builder()
-        .bucketName(bucketName)
-        .folderPath(folderName)
-        .files(List.of(file1))
-        .build();
+    when(s3Mock.putObject(any())).thenThrow(AmazonServiceException.class);
 
-    when(amazonS3.putObject(any())).thenThrow(AmazonServiceException.class);
+    final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
+        .files(List.of(file1Mock)).build();
+
     assertThrows(AwsStorageException.class, () -> awsStorageService.upload(storageDto));
   }
 
   @Test
   void shouldDownloadFileFromS3() {
+    final var s3Object = createObject(null, null, fileContent);
+    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
+
     final var storageDto = StorageDto.builder().bucketName(bucketName)
         .key(key).build();
-    final var s3Object = new S3Object();
-    s3Object.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
-    when(amazonS3.getObject(bucketName, key)).thenReturn(s3Object);
     final var byteArray = awsStorageService.download(storageDto);
     final var downloadedContent = new String(byteArray);
 
@@ -145,25 +151,20 @@ public class AwsStorageServiceTest {
 
   @Test
   void shouldThrowExceptionWhenDownloadFileNotFound() {
-    final var storageDto = StorageDto.builder().bucketName(bucketName)
-        .key(fileName).build();
-    final var s3Object = new S3Object();
-    s3Object.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
-    when(amazonS3.getObject(bucketName, key)).thenThrow(AmazonServiceException.class);
+    when(s3Mock.getObject(bucketName, key)).thenThrow(AmazonServiceException.class);
 
+    final var storageDto = StorageDto.builder().bucketName(bucketName)
+        .key(key).build();
     assertThrows(AwsStorageException.class, () -> awsStorageService.download(storageDto));
   }
 
 
   @Test
   void getDataShouldReturnExpectedData() {
-    final StorageDto input = StorageDto.builder().bucketName(bucketName).key(key).build();
-    final S3Object stubbedValue = new S3Object();
-    stubbedValue.setBucketName(bucketName);
-    stubbedValue.setKey(key);
-    stubbedValue.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
-    when(amazonS3.getObject(bucketName, key)).thenReturn(stubbedValue);
+    final S3Object stubbedValue = createObject(bucketName, key, fileContent);
+    when(s3Mock.getObject(bucketName, key)).thenReturn(stubbedValue);
 
+    final StorageDto input = StorageDto.builder().bucketName(bucketName).key(key).build();
     final String actual = awsStorageService.getData(input);
 
     assertEquals(fileContent, actual);
@@ -173,10 +174,8 @@ public class AwsStorageServiceTest {
   void getDataShouldWrapException() {
     final var storageDto = StorageDto.builder().bucketName(bucketName)
         .key(key).build();
-    final var s3Object = new S3Object();
-    s3Object.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
     String expectedMessage = "Expected Exception";
-    when(amazonS3.getObject(bucketName, key)).thenThrow(new AmazonServiceException(
+    when(s3Mock.getObject(bucketName, key)).thenThrow(new AmazonServiceException(
         expectedMessage));
 
     Throwable actual =
@@ -186,20 +185,17 @@ public class AwsStorageServiceTest {
 
   @Test
   void shouldListFilesFromS3() {
+    final var key = folderName + "/test.txt";
+    final S3ObjectSummary s3ObjectSummary = createSummary(bucketName, key);
+    when(s3Mock.listObjects(bucketName, folderName + "/")).thenReturn(objectListingMock);
+    when(objectListingMock.getObjectSummaries()).thenReturn(List.of(s3ObjectSummary));
+    expectMetadataInteractions(bucketName, key, metadataMock, "test.txt", "txt");
+    when(metadataMock.getUserMetadata()).thenReturn(Map.of("destination", "unknown"));
+
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .build();
-    final var key = folderName + "/test.txt";
-    final var s3ObjectSummary = new S3ObjectSummary();
-    s3ObjectSummary.setBucketName(bucketName);
-    s3ObjectSummary.setKey(key);
-    when(amazonS3.listObjects(bucketName, folderName + "/")).thenReturn(objectListing);
-    when(objectListing.getObjectSummaries()).thenReturn(List.of(s3ObjectSummary));
-    when(amazonS3.getObjectMetadata(bucketName, key)).thenReturn(metadata);
-    when(metadata.getUserMetaDataOf("name")).thenReturn("test.txt");
-    when(metadata.getUserMetaDataOf("type")).thenReturn("txt");
-    when(metadata.getUserMetadata()).thenReturn(Map.of("destination", "unknown"));
+    final var objectSummaries = awsStorageService.listFiles(storageDto, true, null);
 
-    final var objectSummaries = awsStorageService.listFiles(storageDto, true);
     assertThat(objectSummaries, hasSize(1));
     assertThat(objectSummaries.get(0).getBucketName(), is(bucketName));
     assertThat(objectSummaries.get(0).getKey(), is(key));
@@ -210,25 +206,21 @@ public class AwsStorageServiceTest {
 
   @Test
   void shouldListFilesFromS3WithoutMetadata() {
+    final var key = folderName + "/test.txt";
+    final S3ObjectSummary s3ObjectSummary = createSummary(bucketName, key);
+    when(s3Mock.listObjects(bucketName, folderName + "/")).thenReturn(objectListingMock);
+    when(objectListingMock.getObjectSummaries()).thenReturn(List.of(s3ObjectSummary));
+    expectMetadataInteractions(bucketName, key, metadataMock, null, null);
+
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .build();
-    final var key = folderName + "/test.txt";
-    final var s3ObjectSummary = new S3ObjectSummary();
-    s3ObjectSummary.setBucketName(bucketName);
-    s3ObjectSummary.setKey(key);
-    when(amazonS3.listObjects(bucketName, folderName + "/")).thenReturn(objectListing);
-    when(objectListing.getObjectSummaries()).thenReturn(List.of(s3ObjectSummary));
-    when(amazonS3.getObjectMetadata(bucketName, key)).thenReturn(metadata);
-    when(metadata.getUserMetaDataOf("name")).thenReturn(null);
-    when(metadata.getUserMetaDataOf("type")).thenReturn(null);
-
-    final var objectSummaries = awsStorageService.listFiles(storageDto, false);
+    final var objectSummaries = awsStorageService.listFiles(storageDto, false, null);
     assertThat(objectSummaries, hasSize(1));
     assertThat(objectSummaries.get(0).getBucketName(), is(bucketName));
     assertThat(objectSummaries.get(0).getKey(), is(key));
     assertThat(objectSummaries.get(0).getFileName(), is(nullValue()));
     assertThat(objectSummaries.get(0).getCustomMetadata(), is(nullValue()));
-    verify(metadata, never()).getUserMetadata();
+    verify(metadataMock, never()).getUserMetadata();
   }
 
   @Test
@@ -237,9 +229,10 @@ public class AwsStorageServiceTest {
         .bucketName(bucketName)
         .folderPath(folderName)
         .build();
-    when(amazonS3.listObjects(bucketName, folderName + "/"))
+    when(s3Mock.listObjects(bucketName, folderName + "/"))
         .thenThrow(AmazonServiceException.class);
-    assertThrows(AwsStorageException.class, () -> awsStorageService.listFiles(storageDto, false));
+    assertThrows(AwsStorageException.class, () -> awsStorageService.listFiles(storageDto, false,
+        null));
   }
 
   @Test
@@ -247,15 +240,88 @@ public class AwsStorageServiceTest {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
         .build();
     awsStorageService.delete(storageDto);
-    verify(amazonS3).deleteObject(bucketName, key);
+    verify(s3Mock).deleteObject(bucketName, key);
   }
 
   @Test
   void shouldThrowExceptionWhenFailToDeleteFile() {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
         .build();
-    doThrow(AmazonServiceException.class).when(amazonS3).deleteObject(bucketName, key);
+    doThrow(AmazonServiceException.class).when(s3Mock).deleteObject(bucketName, key);
     assertThrows(AwsStorageException.class, () -> awsStorageService.delete(storageDto));
+  }
+
+  private S3Object createObject(String bucketName, String key, String fileContent) {
+    S3Object obj = new S3Object();
+    obj.setBucketName(bucketName);
+    obj.setKey(key);
+    obj.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
+    return obj;
+  }
+
+  private S3ObjectSummary createSummary(String bucketName, String objectKey) {
+    S3ObjectSummary summary = new S3ObjectSummary();
+    summary.setBucketName(bucketName);
+    summary.setKey(objectKey);
+    return summary;
+  }
+
+  private void expectMetadataInteractions(String objectBucketName, String objectKey,
+      ObjectMetadata objectMetadata, String objectName, String objectType) {
+    when(s3Mock.getObjectMetadata(objectBucketName, objectKey)).thenReturn(objectMetadata);
+    when(objectMetadata.getUserMetaDataOf("name")).thenReturn(objectName);
+    when(objectMetadata.getUserMetaDataOf("type")).thenReturn(objectType);
+  }
+
+  @Nested
+  class SortingTest {
+
+    @Test
+    void listFilesShouldSort() {
+      S3ObjectSummary s3Object1 = createSummary(bucketName, key + "1");
+      S3ObjectSummary s3Object2 = createSummary(bucketName, key + "2");
+      S3ObjectSummary s3Object3 = createSummary(bucketName, key + "3");
+      S3ObjectSummary s3Object4 = createSummary(bucketName, key + "nullName");
+      when(s3Mock.listObjects(bucketName, folderName + "/")).thenReturn(objectListingMock);
+      when(objectListingMock.getObjectSummaries()).thenReturn(
+          Arrays.asList(s3Object2, s3Object4, s3Object1, s3Object3));
+      String test1Name = "test1.foo";
+      expectMetadataInteractions(bucketName, key + "1", metadataMock, test1Name, null);
+      String test2Name = "test2.foo";
+      expectMetadataInteractions(bucketName, key + "2", metadataMock2, test2Name, null);
+      String test3Name = "test3.foo";
+      expectMetadataInteractions(bucketName, key + "3", metadataMock3, test3Name, null);
+      expectMetadataInteractions(bucketName, key + "nullName", metadataMock4, null, null);
+
+      final StorageDto storageDto = StorageDto.builder().bucketName(bucketName)
+          .folderPath(folderName).build();
+      final var actualFileSummaryList = awsStorageService
+          .listFiles(storageDto, false, "fileName,desc");
+
+      assertThat(actualFileSummaryList, hasSize(4));
+      assertThat(actualFileSummaryList.get(0).getFileName(), is(test3Name));
+      assertThat(actualFileSummaryList.get(1).getFileName(), is(test2Name));
+      assertThat(actualFileSummaryList.get(2).getFileName(), is(test1Name));
+      assertThat(actualFileSummaryList.get(3).getFileName(), nullValue());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"nonexistantProp,asc", "filename,asc,extraBit"})
+    void listFilesWithBadSortShouldStillReturn(String sort) {
+      S3ObjectSummary s3Object1 = createSummary(bucketName, key + "1");
+      S3ObjectSummary s3Object4 = createSummary(bucketName, key + "nullName");
+      when(s3Mock.listObjects(bucketName, folderName + "/")).thenReturn(objectListingMock);
+      when(objectListingMock.getObjectSummaries()).thenReturn(
+          Arrays.asList(s3Object4, s3Object1));
+      expectMetadataInteractions(bucketName, key + "1", metadataMock, null, null);
+      expectMetadataInteractions(bucketName, key + "nullName", metadataMock, null, null);
+
+      final StorageDto storageDto = StorageDto.builder().bucketName(bucketName)
+          .folderPath(folderName).build();
+      final var actualList = awsStorageService.listFiles(storageDto, false, sort);
+
+      assertThat(actualList, hasSize(2));
+    }
   }
 
 }

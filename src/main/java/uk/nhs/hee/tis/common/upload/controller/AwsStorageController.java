@@ -3,6 +3,7 @@ package uk.nhs.hee.tis.common.upload.controller;
 import static org.springframework.http.HttpHeaders.CONTENT_DISPOSITION;
 import static org.springframework.http.HttpHeaders.CONTENT_TYPE;
 
+import java.util.List;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
@@ -105,18 +107,21 @@ public class AwsStorageController {
    * @return a list of the objects at the requested location
    */
   @GetMapping("/list")
-  public ResponseEntity listFiles(@RequestParam("bucketName") final String bucketName,
+  public ResponseEntity<List<FileSummaryDto>> listFiles(
+      @RequestParam("bucketName") final String bucketName,
       @RequestParam("folderPath") final String folderPath,
+      @RequestParam(value = "sort", required = false) final String sort,
       @RequestParam(value = "includeCustomMetadata", required = false)
       final boolean includeCustomMetaData) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(folderPath)) {
-      log.info("Request receive to download files from bucket: {} and folder location: {}",
+      log.info("Request receive to list files from bucket: {} and folder location: {}",
           bucketName, folderPath);
       final var storageDto = StorageDto.builder().bucketName(bucketName)
           .folderPath(folderPath).build();
-      final var objectSummaries = awsStorageService.listFiles(storageDto, includeCustomMetaData);
-      return ResponseEntity.ok().body(objectSummaries);
+      final var fileSummaryList = awsStorageService
+          .listFiles(storageDto, includeCustomMetaData, sort);
+      return ResponseEntity.ok().body(fileSummaryList);
     } else {
       throw new AwsStorageException(
           "Bucket Name and Folder Path, all parameters required to serve list");

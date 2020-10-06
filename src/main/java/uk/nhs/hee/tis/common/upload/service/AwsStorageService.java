@@ -10,9 +10,14 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import java.lang.reflect.InvocationTargetException;
+import java.util.Comparator;
 import java.util.List;
+import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
@@ -23,11 +28,20 @@ import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 @Service
 public class AwsStorageService {
 
+  public static final String SORT_DELIM = ",";
   private static final String USER_METADATA_FILE_NAME = "name";
   private static final String USER_METADATA_FILE_TYPE = "type";
-
   @Autowired
   private AmazonS3 amazonS3;
+
+  private static String getStringProperty(final FileSummaryDto o, final String name) {
+    try {
+      return (String) PropertyUtils.getNestedProperty(o, name);
+    } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
+      log.warn("Couldn't find the sort property [{}] on FileSummary:{}", name, o, e);
+      return null;
+    }
+  }
 
   /**
    * Upload files in the bucket with a prefix of folderPath, specified in {@code storageDto}.
@@ -52,7 +66,8 @@ public class AwsStorageService {
         log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
         return amazonS3.putObject(request);
       } catch (Exception e) {
-        log.error("Fail to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName);
+        log.error("Failed to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName,
+            e);
         throw new AwsStorageException(e.getMessage());
       }
     }).collect(toList());
@@ -76,7 +91,7 @@ public class AwsStorageService {
       return content;
     } catch (Exception e) {
       log.error("Fail to download file: {} from bucket: {}", storageDto.getKey(),
-          storageDto.getBucketName());
+          storageDto.getBucketName(), e);
       throw new AwsStorageException(e.getMessage());
     }
   }
@@ -101,18 +116,39 @@ public class AwsStorageService {
    *
    * @param storageDto      holder for the bucket and folderPath (key prefix)
    * @param includeMetadata whether all custom metadata should be included
+   * @param sort            A sort key and direction, See https://docs.spring.io/spring-data/rest/docs/current/reference/html/#paging-and-sorting.sorting
    * @return a list of summaries for objects which were found
    */
   public List<FileSummaryDto> listFiles(final StorageDto storageDto,
-      final boolean includeMetadata) {
+      final boolean includeMetadata, final String sort) {
     try {
       final var listObjects = amazonS3
           .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
-      return listObjects.getObjectSummaries().stream()
+      var fileSummaryList = listObjects.getObjectSummaries().stream()
           .map(summary -> buildFileSummary(summary, includeMetadata)).collect(toList());
+
+      if (StringUtils.isNotBlank(sort) && sort.split(SORT_DELIM).length < 3) {
+        String[] sortEntry = sort.split(SORT_DELIM);
+        String sortKey = sortEntry[0];
+        String sortDirection = sortEntry[1];
+
+        Function<? super FileSummaryDto, String> extractor = o -> getStringProperty(o, sortKey);
+        Comparator<? super String> comparator;
+        switch (sortDirection) {
+          case "desc":
+            comparator = Comparator.reverseOrder();
+            break;
+          case "asc":
+          default:
+            comparator = Comparator.naturalOrder();
+        }
+
+        fileSummaryList.sort(Comparator.comparing(extractor, Comparator.nullsLast(comparator)));
+      }
+      return fileSummaryList;
     } catch (Exception e) {
       log.error("Fail to list files from bucket: {} with folderPath: {}",
-          storageDto.getBucketName(), storageDto.getFolderPath());
+          storageDto.getBucketName(), storageDto.getFolderPath(), e);
       throw new AwsStorageException(e.getMessage());
     }
   }
@@ -131,7 +167,7 @@ public class AwsStorageService {
       log.info("File is removed successfully.");
     } catch (Exception e) {
       log.error("Fail to delete file from bucket: {} with key: {}",
-          storageDto.getBucketName(), storageDto.getKey());
+          storageDto.getBucketName(), storageDto.getKey(), e);
       throw new AwsStorageException(e.getMessage());
     }
   }
