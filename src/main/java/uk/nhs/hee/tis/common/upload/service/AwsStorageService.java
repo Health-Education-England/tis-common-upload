@@ -66,7 +66,8 @@ public class AwsStorageService {
         log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
         return amazonS3.putObject(request);
       } catch (Exception e) {
-        log.error("Fail to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName);
+        log.error("Failed to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName,
+            e);
         throw new AwsStorageException(e.getMessage());
       }
     }).collect(toList());
@@ -90,7 +91,7 @@ public class AwsStorageService {
       return content;
     } catch (Exception e) {
       log.error("Fail to download file: {} from bucket: {}", storageDto.getKey(),
-          storageDto.getBucketName());
+          storageDto.getBucketName(), e);
       throw new AwsStorageException(e.getMessage());
     }
   }
@@ -166,7 +167,7 @@ public class AwsStorageService {
       log.info("File is removed successfully.");
     } catch (Exception e) {
       log.error("Fail to delete file from bucket: {} with key: {}",
-          storageDto.getBucketName(), storageDto.getKey());
+          storageDto.getBucketName(), storageDto.getKey(), e);
       throw new AwsStorageException(e.getMessage());
     }
   }
