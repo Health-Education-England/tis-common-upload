@@ -22,6 +22,7 @@
 package uk.nhs.hee.tis.common.upload.service;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
@@ -271,7 +272,38 @@ public class AwsStorageServiceTest {
     assertThat(fileSummaryDtoList.get(1).getFileName(), is(test2Name));
     assertThat(fileSummaryDtoList.get(2).getFileName(), is(test1Name));
     assertThat(fileSummaryDtoList.get(3).getFileName(), nullValue());
+  }
 
+  @Test
+  void listFilesWithNoPropertyShouldStillReturn() {
+    S3ObjectSummary s3Object1 = createSummary(bucketName, key + "1");
+    S3ObjectSummary s3Object2 = createSummary(bucketName, key + "2");
+    S3ObjectSummary s3Object3 = createSummary(bucketName, key + "3");
+    S3ObjectSummary s3Object4 = createSummary(bucketName, key + "nullName");
+    when(s3Mock.listObjects(bucketName, folderName + "/")).thenReturn(objectListingMock);
+    when(objectListingMock.getObjectSummaries()).thenReturn(
+        Arrays.asList(s3Object2, s3Object4, s3Object1, s3Object3));
+    when(s3Mock.getObjectMetadata(bucketName, key + "1")).thenReturn(metadataMock);
+    when(s3Mock.getObjectMetadata(bucketName, key + "2")).thenReturn(metadataMock2);
+    when(s3Mock.getObjectMetadata(bucketName, key + "3")).thenReturn(metadataMock3);
+    when(s3Mock.getObjectMetadata(bucketName, key + "nullName")).thenReturn(metadataMock4);
+    String test1Name = "test1.foo";
+    when(metadataMock.getUserMetaDataOf("name")).thenReturn(test1Name);
+    when(metadataMock.getUserMetaDataOf("type")).thenReturn(null);
+    String test2Name = "test2.foo";
+    when(metadataMock2.getUserMetaDataOf("name")).thenReturn(test2Name);
+    when(metadataMock2.getUserMetaDataOf("type")).thenReturn(null);
+    String test3Name = "test3.foo";
+    when(metadataMock3.getUserMetaDataOf("name")).thenReturn(test3Name);
+    when(metadataMock3.getUserMetaDataOf("type")).thenReturn(null);
+    when(metadataMock4.getUserMetaDataOf("name")).thenReturn(null);
+    when(metadataMock4.getUserMetaDataOf("type")).thenReturn(null);
+    final StorageDto storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
+        .build();
+
+    final var fileSummaryDtoList = awsStorageService.listFiles(storageDto, false, "nonexistantProp,asc");
+
+    assertThat(fileSummaryDtoList, hasSize(4));
   }
 
   private S3ObjectSummary createSummary(String bucketName, String objectKey) {

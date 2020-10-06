@@ -38,7 +38,7 @@ public class AwsStorageService {
     try {
       return (String) PropertyUtils.getNestedProperty(o, name);
     } catch (IllegalAccessException | InvocationTargetException | NoSuchMethodException e) {
-      log.warn("Couldn't find the sort property [{}] on FileSummary:{}", name, o);
+      log.warn("Couldn't find the sort property [{}] on FileSummary:{}", name, o, e);
       return null;
     }
   }
@@ -125,8 +125,9 @@ public class AwsStorageService {
           .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
       var fileSummaryList = listObjects.getObjectSummaries().stream()
           .map(summary -> buildFileSummary(summary, includeMetadata)).collect(toList());
-      String[] sortEntry;
-      if (StringUtils.isNotBlank(sort) && (sortEntry = sort.split(SORT_DELIM)).length < 3) {
+
+      if (StringUtils.isNotBlank(sort) && sort.split(SORT_DELIM).length < 3) {
+        String[] sortEntry = sort.split(SORT_DELIM);
         String sortKey = sortEntry[0];
         String sortDirection = sortEntry[1];
 
@@ -146,7 +147,7 @@ public class AwsStorageService {
       return fileSummaryList;
     } catch (Exception e) {
       log.error("Fail to list files from bucket: {} with folderPath: {}",
-          storageDto.getBucketName(), storageDto.getFolderPath());
+          storageDto.getBucketName(), storageDto.getFolderPath(), e);
       throw new AwsStorageException(e.getMessage());
     }
   }
