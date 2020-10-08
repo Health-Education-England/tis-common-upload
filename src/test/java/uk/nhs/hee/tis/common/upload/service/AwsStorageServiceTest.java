@@ -22,6 +22,7 @@
 package uk.nhs.hee.tis.common.upload.service;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
@@ -38,6 +39,7 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
@@ -54,6 +56,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.mockito.ArgumentCaptor;
+import org.mockito.Captor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -96,11 +100,15 @@ public class AwsStorageServiceTest {
   @Mock
   private ObjectMetadata metadataMock4;
 
+  @Captor
+  private ArgumentCaptor<PutObjectRequest> putRequestCaptor;
+
   private String fileName;
   private String bucketName;
   private String folderName;
   private String fileContent;
   private String key;
+  private Map<String, String> customMetadata;
 
   @BeforeEach
   void setup() {
@@ -109,6 +117,7 @@ public class AwsStorageServiceTest {
     folderName = faker.lorem().characters(10);
     fileContent = faker.lorem().sentence(5);
     key = faker.lorem().characters(10);
+    customMetadata = Map.of("answer", "42", "uploadedBy", "Marvin");
   }
 
   @Test
@@ -117,13 +126,15 @@ public class AwsStorageServiceTest {
     when(file2Mock.getOriginalFilename()).thenReturn(fileName);
     when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
     when(file2Mock.getInputStream()).thenReturn(inputStreamMock);
-    when(s3Mock.putObject(any())).thenReturn(resultMock);
+    when(s3Mock.putObject(putRequestCaptor.capture())).thenReturn(resultMock);
 
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
-        .files(List.of(file1Mock, file2Mock)).build();
+        .files(List.of(file1Mock, file2Mock)).customMetadata(customMetadata).build();
     final var putObjectResult = awsStorageService.upload(storageDto);
 
     assertThat(putObjectResult, hasSize(2));
+    var actualUserMetadata = putRequestCaptor.getValue().getMetadata().getUserMetadata().entrySet();
+    customMetadata.entrySet().forEach(entry -> assertThat(actualUserMetadata, hasItem(entry)));
   }
 
   @Test
