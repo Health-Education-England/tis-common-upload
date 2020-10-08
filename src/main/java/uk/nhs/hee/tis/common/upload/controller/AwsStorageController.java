@@ -112,7 +112,7 @@ public class AwsStorageController {
       @RequestParam("folderPath") final String folderPath,
       @RequestParam(value = "sort", required = false) final String sort,
       @RequestParam(value = "includeCustomMetadata", required = false)
-      final boolean includeCustomMetaData) {
+        final boolean includeCustomMetaData) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(folderPath)) {
       log.info("Request receive to list files from bucket: {} and folder location: {}",

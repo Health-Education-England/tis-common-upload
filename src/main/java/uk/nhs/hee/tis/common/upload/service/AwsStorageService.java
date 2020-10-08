@@ -13,6 +13,7 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.beanutils.PropertyUtils;
@@ -60,6 +61,9 @@ public class AwsStorageService {
       try {
         final var key = format("%s/%s", folderPath, file.getOriginalFilename());
         final var metadata = new ObjectMetadata();
+        if (storageDto.getCustomMetadata() != null) {
+          metadata.getUserMetadata().putAll(storageDto.getCustomMetadata());
+        }
         metadata.addUserMetadata(USER_METADATA_FILE_NAME, file.getOriginalFilename());
         metadata.addUserMetadata(USER_METADATA_FILE_TYPE, getExtension(file.getOriginalFilename()));
         final var request = new PutObjectRequest(bucketName, key, file.getInputStream(), metadata);
@@ -132,16 +136,9 @@ public class AwsStorageService {
         String sortKey = sortEntry[0];
         String sortDirection = sortEntry[1];
 
-        Function<? super FileSummaryDto, String> extractor = o -> getStringProperty(o, sortKey);
-        Comparator<? super String> comparator;
-        switch (sortDirection) {
-          case "desc":
-            comparator = Comparator.reverseOrder();
-            break;
-          case "asc":
-          default:
-            comparator = Comparator.naturalOrder();
-        }
+        Function<FileSummaryDto, String> extractor = o -> getStringProperty(o, sortKey);
+        Comparator<String> comparator = Objects.equals(sortDirection, "desc")
+            ? Comparator.reverseOrder() : Comparator.naturalOrder();
 
         fileSummaryList.sort(Comparator.comparing(extractor, Comparator.nullsLast(comparator)));
       }
