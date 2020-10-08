@@ -13,6 +13,7 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.beanutils.PropertyUtils;
@@ -135,9 +136,9 @@ public class AwsStorageService {
         String sortKey = sortEntry[0];
         String sortDirection = sortEntry[1];
 
-        Function<? super FileSummaryDto, String> extractor = o -> getStringProperty(o, sortKey);
-        Comparator<? super String> comparator =
-            "desc".equals(sortDirection) ? Comparator.reverseOrder() : Comparator.naturalOrder();
+        Function<FileSummaryDto, String> extractor = o -> getStringProperty(o, sortKey);
+        Comparator<String> comparator = Objects.equals(sortDirection, "desc")
+            ? Comparator.reverseOrder() : Comparator.naturalOrder();
 
         fileSummaryList.sort(Comparator.comparing(extractor, Comparator.nullsLast(comparator)));
       }
