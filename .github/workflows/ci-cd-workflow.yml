@@ -203,10 +203,7 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy Amazon ECS task definition
-        run: aws ecs update-service \
-          --cluster trainee-preprod \
-          --service ${{ github.event.repository.name }} \
-          --task-definition ${{ github.event.repository.name }}
+        run: aws ecs update-service --cluster trainee-preprod --service ${{ github.event.repository.name }} --task-definition ${{ github.event.repository.name }}
 
   deploy-trainee:
     name: Deploy to Trainee
@@ -222,7 +219,4 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy Amazon ECS task definition
-        run: aws ecs update-service \
-          --cluster trainee-preprod \
-          --service ${{ github.event.repository.name }} \
-          --task-definition ${{ github.event.repository.name }}
+        run: aws ecs update-service --cluster trainee-preprod --service ${{ github.event.repository.name }} --task-definition ${{ github.event.repository.name }}
