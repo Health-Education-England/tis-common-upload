@@ -29,11 +29,3 @@ app:
   error:
     exchange: "ex.error"
     limit.retries: true
-
-  aws:
-    access:
-      key:
-        id: ${AWS_ACCESS_KEY:${AWS_ACCESS_KEY_ID:#{null}}}
-    secret:
-      access:
-        key: ${AWS_SECRET_ACCESS_KEY:#{null}}
