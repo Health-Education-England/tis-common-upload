@@ -202,13 +202,11 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: eu-west-2
 
-      - name: Deploy Amazon ECS task definition
-        uses: donaldpiret/ecs-deploy@master
-        with:
-          cluster: revalidation-preprod
-          target: ${{ github.event.repository.name }}
-          task: ${{ github.event.repository.name }}
-          no_deregister: true
+            - name: Deploy Amazon ECS task definition
+              run:  aws ecs update-service \
+                --cluster trainee-preprod \
+                --service ${{ github.event.repository.name }} \
+                --task-definition ${{ github.event.repository.name }}
 
   deploy-trainee:
     name: Deploy to Trainee
@@ -224,9 +222,7 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy Amazon ECS task definition
-        uses: donaldpiret/ecs-deploy@master
-        with:
-          cluster: trainee-preprod
-          target: ${{ github.event.repository.name }}
-          task: ${{ github.event.repository.name }}
-          no_deregister: true
+        run:  aws ecs update-service \
+          --cluster trainee-preprod \
+          --service ${{ github.event.repository.name }} \
+          --task-definition ${{ github.event.repository.name }}
