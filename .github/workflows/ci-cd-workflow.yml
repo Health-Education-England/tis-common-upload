@@ -2,8 +2,7 @@ name: CI/CD Workflow
 
 on:
   push:
-  repository_dispatch:
-    types: [run_ci-cd]
+  workflow_dispatch:
 
 jobs:
   assemble:
@@ -157,8 +156,8 @@ jobs:
           docker tag $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:latest
           docker push $ECR_REGISTRY/$ECR_REPOSITORY
 
-  deploy:
-    name: Deploy
+  deploy-reval:
+    name: Deploy to Reval
     needs: dockerize
     runs-on: ubuntu-latest
 
@@ -191,4 +190,40 @@ jobs:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
           service: ${{ github.event.repository.name }}
           cluster: revalidation-preprod
+          wait-for-service-stability: true
+
+  deploy-trainee:
+    name: Deploy to Trainee
+    needs: dockerize
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+
+      - name: Fill in the new image ID in the Amazon ECS task definition
+        id: task-def
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
+        with:
+          task-definition: .aws/task-definition.json
+          container-name: ${{ github.event.repository.name }}
+          image: ${{ steps.login-ecr.outputs.registry }}/${{ github.event.repository.name }}:${{ github.sha }}
+
+      - name: Deploy Amazon ECS task definition
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          task-definition: ${{ steps.task-def.outputs.task-definition }}
+          service: ${{ github.event.repository.name }}
+          cluster: trainee-preprod
           wait-for-service-stability: true
