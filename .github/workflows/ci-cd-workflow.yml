@@ -203,7 +203,10 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy Amazon ECS task definition
-        run: aws ecs update-service --cluster trainee-preprod --service ${{ github.event.repository.name }} --task-definition ${{ github.event.repository.name }}
+        run: aws ecs update-service \
+          --cluster revalidation-preprod \
+          --service ${{ github.event.repository.name }} \
+          --task-definition ${{ github.event.repository.name }}
 
   deploy-trainee:
     name: Deploy to Trainee
@@ -219,4 +222,15 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy Amazon ECS task definition
-        run: aws ecs update-service --cluster trainee-preprod --service ${{ github.event.repository.name }} --task-definition ${{ github.event.repository.name }}
+        run: aws ecs update-service \
+          --cluster trainee-preprod \
+          --service ${{ github.event.repository.name }} \
+          --task-definition ${{ github.event.repository.name }}
+
+      - name: Build, tag as stable and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: ${{ github.event.repository.name }}
+        run: |
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} $ECR_REGISTRY/$ECR_REPOSITORY:stable
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY
