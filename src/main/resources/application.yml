@@ -29,3 +29,7 @@ app:
   error:
     exchange: "ex.error"
     limit.retries: true
+
+sentry:
+  dsn: ${SENTRY_DSN:}
+  environment: ${SENTRY_ENVIRONMENT:}
