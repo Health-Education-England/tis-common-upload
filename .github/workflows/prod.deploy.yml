@@ -49,7 +49,7 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy Amazon ECS task definition
-        run: aws ecs update-service --cluster revalidation-prod --service ${{ github.event.repository.name }} --task-definition ${{ github.event.repository.name }}
+        run: aws ecs update-service --cluster revalidation-prod --service ${{ github.event.repository.name }} --task-definition ${{ steps.task-def.outputs.task-definition }}
 
   deploy-trainee:
     name: Deploy to Trainee Production
@@ -65,4 +65,4 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy Amazon ECS task definition
-        run: aws ecs update-service --cluster trainee-prod --service ${{ github.event.repository.name }}-trainee --task-definition ${{ github.event.repository.name }}
+        run: aws ecs update-service --cluster trainee-prod --service ${{ github.event.repository.name }}-trainee --task-definition ${{ steps.task-def.outputs.task-definition }}
