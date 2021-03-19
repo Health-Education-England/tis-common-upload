@@ -65,4 +65,4 @@ jobs:
           aws-region: eu-west-2
 
       - name: Deploy Amazon ECS task definition
-        run: aws ecs update-service --cluster trainee-prod --service ${{ github.event.repository.name }} --task-definition ${{ github.event.repository.name }}
+        run: aws ecs update-service --cluster trainee-prod --service ${{ github.event.repository.name }}-trainee --task-definition ${{ github.event.repository.name }}
