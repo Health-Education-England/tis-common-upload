@@ -205,25 +205,9 @@ jobs:
       - name: Deploy Amazon ECS task definition
         run: aws ecs update-service --cluster revalidation-preprod --service ${{ github.event.repository.name }} --task-definition ${{ github.event.repository.name }}
 
-  deploy-trainee:
-    name: Deploy to Trainee
-    needs: register-task-definition
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v1
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: eu-west-2
-
-      - name: Deploy Amazon ECS task definition
-        run: aws ecs update-service --cluster trainee-preprod --service ${{ github.event.repository.name }} --task-definition ${{ github.event.repository.name }}
-
   tag-stable:
     name: Tag image as stable
-    needs: [deploy-reval, deploy-trainee]
+    needs: [deploy-reval]
     runs-on: ubuntu-latest
 
     steps:
