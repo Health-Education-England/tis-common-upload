@@ -300,6 +300,6 @@ jobs:
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
           task-definition: ${{ steps.task-def.outputs.task-definition }}
-          service: ${{ github.event.repository.name }}
+          service: tis-core-common-upload
           cluster: tis-prod
           wait-for-service-stability: true
