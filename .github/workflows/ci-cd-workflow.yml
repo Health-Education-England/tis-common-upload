@@ -219,7 +219,7 @@ jobs:
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: .aws/task-definition-tis-core-preprod.json
-          container-name: ${{ github.event.repository.name }}
+          container-name: tis-core-common-upload
           image: ${{ steps.login-ecr.outputs.registry }}/${{ github.event.repository.name }}:${{ github.sha }}
 
       - name: Deploy Amazon ECS task definition
@@ -293,7 +293,7 @@ jobs:
         uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
           task-definition: .aws/task-definition-tis-core-prod.json
-          container-name: ${{ github.event.repository.name }}
+          container-name: tis-core-common-upload
           image: ${{ steps.login-ecr.outputs.registry }}/${{ github.event.repository.name }}:${{ github.sha }}
 
       - name: Deploy Amazon ECS task definition
