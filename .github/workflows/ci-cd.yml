@@ -1,0 +1,58 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    uses: ./.github/workflows/build-gradle.yml
+    secrets:
+      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      sonar-token: ${{ secrets.SONAR_TOKEN }}
+
+  deploy-core-preprod:
+    needs: build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      cluster-prefix: tis
+      environment: preprod
+      service-name: tis-core-common-upload
+    secrets:
+      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-core-prod:
+    needs: deploy-core-preprod
+    uses: ./.github/workflows/deploy.yml
+    with:
+      cluster-prefix: tis
+      environment: prod
+      service-name: tis-core-common-upload
+    secrets:
+      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-reval-preprod:
+    needs: build
+    uses: ./.github/workflows/deploy.yml
+    with:
+      cluster-prefix: revalidation
+      environment: preprod
+      service-name: tis-common-upload
+    secrets:
+      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+  deploy-reval-prod:
+    needs: deploy-reval-preprod
+    uses: ./.github/workflows/deploy.yml
+    with:
+      cluster-prefix: revalidation
+      environment: prod
+      service-name: tis-common-upload
+    secrets:
+      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
