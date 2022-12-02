@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    uses: health-education-england/.github/.github/workflows/build-gradle.yml
+    uses: health-education-england/.github/.github/workflows/build-gradle.yml@main
     secrets:
       ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
       ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -15,7 +15,7 @@ jobs:
 
   deploy-core-preprod:
     needs: build
-    uses: health-education-england/.github/.github/workflows/deploy.yml
+    uses: health-education-england/.github/.github/workflows/deploy.yml@main
     with:
       cluster-prefix: tis
       environment: preprod
@@ -26,7 +26,7 @@ jobs:
 
   deploy-core-prod:
     needs: deploy-core-preprod
-    uses: health-education-england/.github/.github/workflows/deploy.yml
+    uses: health-education-england/.github/.github/workflows/deploy.yml@main
     with:
       cluster-prefix: tis
       environment: prod
@@ -37,7 +37,7 @@ jobs:
 
   deploy-reval-preprod:
     needs: build
-    uses: health-education-england/.github/.github/workflows/deploy.yml
+    uses: health-education-england/.github/.github/workflows/deploy.yml@main
     with:
       cluster-prefix: revalidation
       environment: preprod
@@ -48,7 +48,7 @@ jobs:
 
   deploy-reval-prod:
     needs: deploy-reval-preprod
-    uses: health-education-england/.github/.github/workflows/deploy.yml
+    uses: health-education-england/.github/.github/workflows/deploy.yml@main
     with:
       cluster-prefix: revalidation
       environment: prod
