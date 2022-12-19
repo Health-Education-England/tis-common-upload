@@ -11,7 +11,6 @@ plugins {
 
 group = "uk.nhs.hee.tis.common"
 version = "0.3.2"
-sourceCompatibility = "11"
 
 configurations {
   compileOnly {
@@ -65,6 +64,13 @@ jacocoTestReport {
   reports {
     html.enabled true
     xml.enabled true
+  }
+}
+
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(11)
+    vendor = JvmVendorSpec.ADOPTIUM
   }
 }
 
