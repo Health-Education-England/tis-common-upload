@@ -5,11 +5,13 @@ import static java.util.stream.Collectors.toList;
 import static org.apache.commons.io.FilenameUtils.getExtension;
 
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.BucketVersioningConfiguration;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import java.io.ByteArrayInputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Comparator;
 import java.util.List;
@@ -19,6 +21,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
@@ -32,6 +35,11 @@ public class AwsStorageService {
   public static final String SORT_DELIM = ",";
   private static final String USER_METADATA_FILE_NAME = "name";
   private static final String USER_METADATA_FILE_TYPE = "type";
+  private static final String USER_METADATA_DELETE_TYPE = "deletetype";
+  private static final String USER_METADATA_FIXED_FIELDS = "fixedfields";
+  private static final String USER_METADATA_LIFE_CYCLE_STATE = "lifecyclestate";
+  private static final String OBJECT_CONTENT_LIFE_CYCLE_STATE = "lifecycleState";
+  private static final String LIFE_CYCLE_STATE_DELETE = "DELETED";
   @Autowired
   private AmazonS3 amazonS3;
 
@@ -157,8 +165,20 @@ public class AwsStorageService {
    * @throws AwsStorageException if there is a problem deleting the object
    */
   public void delete(final StorageDto storageDto) {
+    final var objectMetadata = amazonS3
+        .getObjectMetadata(storageDto.getBucketName(), storageDto.getKey());
+    String metaDeleteType = objectMetadata == null
+        ? null : objectMetadata.getUserMetaDataOf(USER_METADATA_DELETE_TYPE);
+    if (metaDeleteType != null && metaDeleteType.equals("PARTIAL")) {
+      partialDelete(storageDto, objectMetadata);
+    } else {
+      hardDelete(storageDto);
+    }
+  }
+
+  private void hardDelete(final StorageDto storageDto) {
     try {
-      log.info("Remove file: {} from bucket: {} with key: {}", storageDto.getKey(),
+      log.info("Remove file from bucket: {} with key: {}",
           storageDto.getBucketName(), storageDto.getKey());
       amazonS3.deleteObject(storageDto.getBucketName(), storageDto.getKey());
       log.info("File is removed successfully.");
@@ -166,6 +186,57 @@ public class AwsStorageService {
       log.error("Fail to delete file from bucket: {} with key: {}",
           storageDto.getBucketName(), storageDto.getKey(), e);
       throw new AwsStorageException(e.getMessage());
+    }
+  }
+
+  private void partialDelete(final StorageDto storageDto, ObjectMetadata objectMetadata) {
+    try {
+      final var bucket = storageDto.getBucketName();
+      final var key = storageDto.getKey();
+
+      log.info("Partial delete file from bucket: {} with key: {}", bucket, key);
+
+      // Object Content
+      final var fixedFields =
+          objectMetadata.getUserMetaDataOf(USER_METADATA_FIXED_FIELDS).split(",");
+      var strOriginalContent = getData(storageDto);
+      if (objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE).equals("json")) {
+        final var jsonOriginalContent = new JSONObject(strOriginalContent);
+        JSONObject newContent = new JSONObject();
+        for (String fixedField : fixedFields) {
+          newContent.put(fixedField, jsonOriginalContent.optString(fixedField, null));
+        }
+        newContent.put(OBJECT_CONTENT_LIFE_CYCLE_STATE, LIFE_CYCLE_STATE_DELETE);
+        strOriginalContent = newContent.toString();
+      }
+      final var inputStream = new ByteArrayInputStream(strOriginalContent.getBytes());
+
+      // Metadata
+      objectMetadata.addUserMetadata(USER_METADATA_LIFE_CYCLE_STATE, LIFE_CYCLE_STATE_DELETE);
+      objectMetadata.setContentLength(strOriginalContent.length());
+
+      final var request = new PutObjectRequest(bucket, key, inputStream, objectMetadata);
+      amazonS3.putObject(request);
+
+      deletePreviousVersions(bucket, key);
+
+      log.info("Partial delete successfully.");
+    } catch (Exception e) {
+      log.error("Fail to partial delete file from bucket: {} with key: {}",
+          storageDto.getBucketName(), storageDto.getKey(), e);
+      throw new AwsStorageException(e.getMessage());
+    }
+  }
+
+  private void deletePreviousVersions(final String bucket, final String key) {
+    if (amazonS3.getBucketVersioningConfiguration(bucket).getStatus().equals(
+        BucketVersioningConfiguration.ENABLED)) {
+      final var versions = amazonS3.listVersions(bucket, key);
+      for (var version : versions.getVersionSummaries()) {
+        if (version.isLatest() != true) {
+          amazonS3.deleteVersion(bucket, key, version.getVersionId());
+        }
+      }
     }
   }
 
