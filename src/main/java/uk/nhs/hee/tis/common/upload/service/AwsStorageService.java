@@ -11,21 +11,27 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
+import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
+import uk.nhs.hee.tis.common.upload.enumeration.LifecycleState;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
 @Slf4j
@@ -39,7 +45,6 @@ public class AwsStorageService {
   private static final String USER_METADATA_FIXED_FIELDS = "fixedfields";
   private static final String USER_METADATA_LIFE_CYCLE_STATE = "lifecyclestate";
   private static final String OBJECT_CONTENT_LIFE_CYCLE_STATE = "lifecycleState";
-  private static final String LIFE_CYCLE_STATE_DELETE = "DELETED";
   @Autowired
   private AmazonS3 amazonS3;
 
@@ -169,7 +174,7 @@ public class AwsStorageService {
         .getObjectMetadata(storageDto.getBucketName(), storageDto.getKey());
     String metaDeleteType = objectMetadata == null
         ? null : objectMetadata.getUserMetaDataOf(USER_METADATA_DELETE_TYPE);
-    if (metaDeleteType != null && metaDeleteType.equals("PARTIAL")) {
+    if (metaDeleteType != null && metaDeleteType.equals(DeleteType.PARTIAL.name())) {
       partialDelete(storageDto, objectMetadata);
     } else {
       hardDelete(storageDto);
@@ -201,18 +206,25 @@ public class AwsStorageService {
           objectMetadata.getUserMetaDataOf(USER_METADATA_FIXED_FIELDS).split(",");
       var strOriginalContent = getData(storageDto);
       if (objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE).equals("json")) {
-        final var jsonOriginalContent = new JSONObject(strOriginalContent);
-        JSONObject newContent = new JSONObject();
-        for (String fixedField : fixedFields) {
-          newContent.put(fixedField, jsonOriginalContent.optString(fixedField, null));
+        ObjectMapper objectMapper = new ObjectMapper();
+        JsonNode jsonNode = objectMapper.readTree(strOriginalContent);
+
+        for (Iterator<String> fieldIterator = jsonNode.fieldNames(); fieldIterator.hasNext();) {
+          String fieldName = fieldIterator.next();
+
+          if (!Set.of(fixedFields).contains(fieldName)) {
+            fieldIterator.remove();
+          }
         }
-        newContent.put(OBJECT_CONTENT_LIFE_CYCLE_STATE, LIFE_CYCLE_STATE_DELETE);
-        strOriginalContent = newContent.toString();
+        ((ObjectNode) jsonNode).put(OBJECT_CONTENT_LIFE_CYCLE_STATE,
+            LifecycleState.DELETED.name());
+        strOriginalContent = jsonNode.toString();
       }
       final var inputStream = new ByteArrayInputStream(strOriginalContent.getBytes());
 
       // Metadata
-      objectMetadata.addUserMetadata(USER_METADATA_LIFE_CYCLE_STATE, LIFE_CYCLE_STATE_DELETE);
+      objectMetadata.addUserMetadata(USER_METADATA_LIFE_CYCLE_STATE,
+          LifecycleState.DELETED.name());
       objectMetadata.setContentLength(strOriginalContent.length());
 
       final var request = new PutObjectRequest(bucket, key, inputStream, objectMetadata);
@@ -233,7 +245,7 @@ public class AwsStorageService {
         BucketVersioningConfiguration.ENABLED)) {
       final var versions = amazonS3.listVersions(bucket, key);
       for (var version : versions.getVersionSummaries()) {
-        if (version.isLatest() != true) {
+        if (!version.isLatest()) {
           amazonS3.deleteVersion(bucket, key, version.getVersionId());
         }
       }
