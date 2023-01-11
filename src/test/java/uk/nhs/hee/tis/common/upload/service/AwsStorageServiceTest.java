@@ -37,12 +37,16 @@ import static org.mockito.Mockito.when;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.BucketVersioningConfiguration;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.model.S3VersionSummary;
+import com.amazonaws.services.s3.model.VersionListing;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -63,6 +67,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
+import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
+import uk.nhs.hee.tis.common.upload.enumeration.LifecycleState;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
 @ExtendWith(MockitoExtension.class)
@@ -107,8 +113,15 @@ public class AwsStorageServiceTest {
   private String bucketName;
   private String folderName;
   private String fileContent;
+  private String jsonFileContent;
   private String key;
   private Map<String, String> customMetadata;
+  private ObjectMetadata objectJsonMetadata;
+  private S3VersionSummary versionSummary1;
+  private S3VersionSummary versionSummary2;
+  private S3VersionSummary versionSummary3;
+  private VersionListing versions;
+  private BucketVersioningConfiguration bucketVersioningConfiguration;
 
   @BeforeEach
   void setup() {
@@ -118,6 +131,31 @@ public class AwsStorageServiceTest {
     fileContent = faker.lorem().sentence(5);
     key = faker.lorem().characters(10);
     customMetadata = Map.of("answer", "42", "uploadedBy", "Marvin");
+
+    jsonFileContent =  "{\"id\":\"1\",\"lifecycleState\":\"SUBMITTED\",\"forename\":\"forename\"}";
+
+    bucketVersioningConfiguration = new BucketVersioningConfiguration();
+    bucketVersioningConfiguration.setStatus(BucketVersioningConfiguration.ENABLED);
+
+    objectJsonMetadata = new ObjectMetadata();
+    objectJsonMetadata.addUserMetadata("type", "json");
+    objectJsonMetadata.addUserMetadata("deletetype", DeleteType.PARTIAL.name());
+    objectJsonMetadata.addUserMetadata("fixedfields", "id,lifecycleState");
+    objectJsonMetadata.addUserMetadata("lifecyclestate", LifecycleState.SUBMITTED.name());
+
+    versionSummary1 = new S3VersionSummary();
+    versionSummary1.setVersionId("1");
+    versionSummary1.setIsLatest(true);
+
+    versionSummary2 = new S3VersionSummary();
+    versionSummary2.setVersionId("2");
+    versionSummary2.setIsLatest(false);
+
+    versionSummary3 = new S3VersionSummary();
+    versionSummary3.setVersionId("3");
+    versionSummary3.setIsLatest(false);
+    versions = new VersionListing();
+    versions.setVersionSummaries(List.of(versionSummary1, versionSummary2, versionSummary3));
   }
 
   @Test
@@ -252,6 +290,124 @@ public class AwsStorageServiceTest {
         .build();
     awsStorageService.delete(storageDto);
     verify(s3Mock).deleteObject(bucketName, key);
+  }
+
+  @Test
+  void shouldPartialDeleteFileFromS3() throws IOException {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key).build();
+
+    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    final S3Object s3Object = createObject(bucketName, key, jsonFileContent);
+    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
+    when(s3Mock.getBucketVersioningConfiguration(bucketName))
+        .thenReturn(bucketVersioningConfiguration);
+    when(s3Mock.listVersions(bucketName, key)).thenReturn(versions);
+
+    awsStorageService.delete(storageDto);
+
+    verify(s3Mock).putObject(putRequestCaptor.capture());
+    PutObjectRequest putObjectRequest = putRequestCaptor.getValue();
+
+    assertThat("Unexpected bucket.", putObjectRequest.getBucketName(), is(bucketName));
+    assertThat("Unexpected key.", putObjectRequest.getKey(), is(key));
+
+    final var resultInputStream = putObjectRequest.getInputStream();
+    ObjectMapper mapper = new ObjectMapper();
+    Map<String, Object> resultJsonMap = mapper.readValue(resultInputStream, Map.class);
+    assertThat("Unexpected input stream.", resultJsonMap.get("id"), is("1"));
+    assertThat("Unexpected input stream.", resultJsonMap.get("lifecycleState"),
+        is(LifecycleState.DELETED.name()));
+
+    final var resultUserMetadata = putObjectRequest.getMetadata().getUserMetadata();
+    objectJsonMetadata.getUserMetadata().entrySet().stream()
+        .filter(meta -> meta.getKey() != "lifecyclestate")
+        .forEach(entry -> assertThat(resultUserMetadata.entrySet(), hasItem(entry)));
+    assertThat("Unexpected lifecycleState in object Metadata.",
+        resultUserMetadata.get("lifecyclestate"), is(LifecycleState.DELETED.name()));
+
+    verify(s3Mock, never()).deleteVersion(bucketName, key, "1");
+    verify(s3Mock).deleteVersion(bucketName, key, "2");
+    verify(s3Mock).deleteVersion(bucketName, key, "3");
+  }
+
+  @Test
+  void shouldNotUpdateFileContentIfPartialDeleteFileTypeNotJson() throws IOException {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key).build();
+
+    objectJsonMetadata.addUserMetadata("type", "doc");
+
+    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    final S3Object s3Object = createObject(bucketName, key, jsonFileContent);
+    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
+    when(s3Mock.getBucketVersioningConfiguration(bucketName))
+        .thenReturn(bucketVersioningConfiguration);
+    when(s3Mock.listVersions(bucketName, key)).thenReturn(versions);
+
+    awsStorageService.delete(storageDto);
+
+    verify(s3Mock).putObject(putRequestCaptor.capture());
+    PutObjectRequest putObjectRequest = putRequestCaptor.getValue();
+
+    assertThat("Unexpected bucket.", putObjectRequest.getBucketName(), is(bucketName));
+    assertThat("Unexpected key.", putObjectRequest.getKey(), is(key));
+
+    final var resultInputStream = putObjectRequest.getInputStream();
+    ObjectMapper mapper = new ObjectMapper();
+    Map<String, Object> resultJsonMap = mapper.readValue(resultInputStream, Map.class);
+    assertThat("Unexpected input stream.", resultJsonMap.get("id"), is("1"));
+    assertThat("Unexpected input stream.", resultJsonMap.get("lifecycleState"),
+        is(LifecycleState.SUBMITTED.name()));
+    assertThat("Unexpected input stream.", resultJsonMap.get("forename"), is("forename"));
+
+    final var resultUserMetadata = putObjectRequest.getMetadata().getUserMetadata();
+    objectJsonMetadata.getUserMetadata().entrySet().stream()
+        .filter(meta -> meta.getKey() != "lifecyclestate")
+        .forEach(entry -> assertThat(resultUserMetadata.entrySet(), hasItem(entry)));
+    assertThat("Unexpected lifecycleState in object Metadata.",
+        resultUserMetadata.get("lifecyclestate"), is(LifecycleState.DELETED.name()));
+
+    verify(s3Mock, never()).deleteVersion(bucketName, key, "1");
+    verify(s3Mock).deleteVersion(bucketName, key, "2");
+    verify(s3Mock).deleteVersion(bucketName, key, "3");
+  }
+
+  @Test
+  void shouldNotDeleteVersionIfPartialDeleteVersioningNotEnable() throws IOException {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key).build();
+
+    bucketVersioningConfiguration.setStatus(BucketVersioningConfiguration.OFF);
+
+    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    final S3Object s3Object = createObject(bucketName, key, jsonFileContent);
+    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
+    when(s3Mock.getBucketVersioningConfiguration(bucketName))
+        .thenReturn(bucketVersioningConfiguration);
+
+    awsStorageService.delete(storageDto);
+
+    verify(s3Mock).putObject(putRequestCaptor.capture());
+    PutObjectRequest putObjectRequest = putRequestCaptor.getValue();
+
+    assertThat("Unexpected bucket.", putObjectRequest.getBucketName(), is(bucketName));
+    assertThat("Unexpected key.", putObjectRequest.getKey(), is(key));
+
+    final var resultInputStream = putObjectRequest.getInputStream();
+    ObjectMapper mapper = new ObjectMapper();
+    Map<String, Object> resultJsonMap = mapper.readValue(resultInputStream, Map.class);
+    assertThat("Unexpected input stream.", resultJsonMap.get("id"), is("1"));
+    assertThat("Unexpected input stream.", resultJsonMap.get("lifecycleState"),
+        is(LifecycleState.DELETED.name()));
+
+    final var resultUserMetadata = putObjectRequest.getMetadata().getUserMetadata();
+    objectJsonMetadata.getUserMetadata().entrySet().stream()
+        .filter(meta -> meta.getKey() != "lifecyclestate")
+        .forEach(entry -> assertThat(resultUserMetadata.entrySet(), hasItem(entry)));
+    assertThat("Unexpected lifecycleState in object Metadata.",
+        resultUserMetadata.get("lifecyclestate"), is(LifecycleState.DELETED.name()));
+
+    verify(s3Mock, never()).deleteVersion(bucketName, key, "1");
+    verify(s3Mock, never()).deleteVersion(bucketName, key, "2");
+    verify(s3Mock, never()).deleteVersion(bucketName, key, "3");
   }
 
   @Test
