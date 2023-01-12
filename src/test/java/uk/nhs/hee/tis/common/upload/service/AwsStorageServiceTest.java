@@ -31,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -62,10 +63,10 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
+import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
 import uk.nhs.hee.tis.common.upload.enumeration.LifecycleState;
@@ -76,11 +77,11 @@ public class AwsStorageServiceTest {
 
   private final Faker faker = new Faker();
 
-  @InjectMocks
   private AwsStorageService awsStorageService;
 
-  @Mock
   private AmazonS3 s3Mock;
+
+  private AwsSnsService snsMock;
 
   @Mock
   private MultipartFile file1Mock;
@@ -108,6 +109,8 @@ public class AwsStorageServiceTest {
 
   @Captor
   private ArgumentCaptor<PutObjectRequest> putRequestCaptor;
+  @Captor
+  private ArgumentCaptor<DeleteEventDto> deleteEventCaptor;
 
   private String fileName;
   private String bucketName;
@@ -125,6 +128,10 @@ public class AwsStorageServiceTest {
 
   @BeforeEach
   void setup() {
+    s3Mock = mock(AmazonS3.class);
+    snsMock = mock(AwsSnsService.class);
+    awsStorageService = new AwsStorageService(s3Mock, snsMock);
+
     fileName = faker.lorem().characters(10);
     bucketName = faker.lorem().characters(10);
     folderName = faker.lorem().characters(10);
@@ -290,6 +297,39 @@ public class AwsStorageServiceTest {
         .build();
     awsStorageService.delete(storageDto);
     verify(s3Mock).deleteObject(bucketName, key);
+
+    verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
+    DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
+    assertThat("Unexpected bucket.", resultDeleteEvent.getBucket(), is(bucketName));
+    assertThat("Unexpected key.", resultDeleteEvent.getKey(), is(key));
+    assertThat("Unexpected delete type.",
+        resultDeleteEvent.getDeleteType(), is(DeleteType.HARD));
+  }
+
+  @Test
+  void shouldHardDeleteIfDeleteTypeIsHard() {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
+        .build();
+    objectJsonMetadata.addUserMetadata("deletetype", DeleteType.HARD.name());
+
+    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    awsStorageService.delete(storageDto);
+    verify(s3Mock).deleteObject(bucketName, key);
+
+    verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
+    DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
+    assertThat("Unexpected bucket.", resultDeleteEvent.getBucket(), is(bucketName));
+    assertThat("Unexpected key.", resultDeleteEvent.getKey(), is(key));
+    assertThat("Unexpected delete type.",
+        resultDeleteEvent.getDeleteType(), is(DeleteType.HARD));
+  }
+
+  @Test
+  void shouldThrowExceptionWhenFailToHardDeleteFile() {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
+        .build();
+    doThrow(AmazonServiceException.class).when(s3Mock).deleteObject(bucketName, key);
+    assertThrows(AwsStorageException.class, () -> awsStorageService.delete(storageDto));
   }
 
   @Test
@@ -328,6 +368,13 @@ public class AwsStorageServiceTest {
     verify(s3Mock, never()).deleteVersion(bucketName, key, "1");
     verify(s3Mock).deleteVersion(bucketName, key, "2");
     verify(s3Mock).deleteVersion(bucketName, key, "3");
+
+    verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
+    DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
+    assertThat("Unexpected bucket.", resultDeleteEvent.getBucket(), is(bucketName));
+    assertThat("Unexpected key.", resultDeleteEvent.getKey(), is(key));
+    assertThat("Unexpected delete type.",
+        resultDeleteEvent.getDeleteType(), is(DeleteType.PARTIAL));
   }
 
   @Test
@@ -369,6 +416,13 @@ public class AwsStorageServiceTest {
     verify(s3Mock, never()).deleteVersion(bucketName, key, "1");
     verify(s3Mock).deleteVersion(bucketName, key, "2");
     verify(s3Mock).deleteVersion(bucketName, key, "3");
+
+    verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
+    DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
+    assertThat("Unexpected bucket.", resultDeleteEvent.getBucket(), is(bucketName));
+    assertThat("Unexpected key.", resultDeleteEvent.getKey(), is(key));
+    assertThat("Unexpected delete type.",
+        resultDeleteEvent.getDeleteType(), is(DeleteType.PARTIAL));
   }
 
   @Test
@@ -408,14 +462,13 @@ public class AwsStorageServiceTest {
     verify(s3Mock, never()).deleteVersion(bucketName, key, "1");
     verify(s3Mock, never()).deleteVersion(bucketName, key, "2");
     verify(s3Mock, never()).deleteVersion(bucketName, key, "3");
-  }
 
-  @Test
-  void shouldThrowExceptionWhenFailToDeleteFile() {
-    final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
-        .build();
-    doThrow(AmazonServiceException.class).when(s3Mock).deleteObject(bucketName, key);
-    assertThrows(AwsStorageException.class, () -> awsStorageService.delete(storageDto));
+    verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
+    DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
+    assertThat("Unexpected bucket.", resultDeleteEvent.getBucket(), is(bucketName));
+    assertThat("Unexpected key.", resultDeleteEvent.getKey(), is(key));
+    assertThat("Unexpected delete type.",
+        resultDeleteEvent.getDeleteType(), is(DeleteType.PARTIAL));
   }
 
   private S3Object createObject(String bucketName, String key, String fileContent) {

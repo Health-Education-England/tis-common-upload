@@ -19,7 +19,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
@@ -27,8 +26,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
@@ -46,8 +45,13 @@ public class AwsStorageService {
   private static final String USER_METADATA_FIXED_FIELDS = "fixedfields";
   private static final String USER_METADATA_LIFE_CYCLE_STATE = "lifecyclestate";
   private static final String OBJECT_CONTENT_LIFE_CYCLE_STATE = "lifecycleState";
-  @Autowired
-  private AmazonS3 amazonS3;
+  private final AmazonS3 amazonS3;
+  private final AwsSnsService awsSnsService;
+
+  AwsStorageService(AmazonS3 amazonS3, AwsSnsService awsSnsService) {
+    this.amazonS3 = amazonS3;
+    this.awsSnsService = awsSnsService;
+  }
 
   private static String getStringProperty(final FileSummaryDto o, final String name) {
     try {
@@ -175,6 +179,8 @@ public class AwsStorageService {
         .getObjectMetadata(storageDto.getBucketName(), storageDto.getKey());
     String metaDeleteType = objectMetadata == null
         ? null : objectMetadata.getUserMetaDataOf(USER_METADATA_DELETE_TYPE);
+
+
     if (metaDeleteType != null && metaDeleteType.equals(DeleteType.PARTIAL.name())) {
       partialDelete(storageDto, objectMetadata);
     } else {
@@ -188,8 +194,15 @@ public class AwsStorageService {
           storageDto.getBucketName(), storageDto.getKey());
       amazonS3.deleteObject(storageDto.getBucketName(), storageDto.getKey());
       log.info("File is removed successfully.");
+
+      DeleteEventDto deleteEventDto = DeleteEventDto.builder()
+          .bucket(storageDto.getBucketName())
+          .key(storageDto.getKey())
+          .deleteType(DeleteType.HARD)
+          .build();
+      awsSnsService.publishSnsDeleteEventTopic(deleteEventDto);
     } catch (Exception e) {
-      log.error("Fail to delete file from bucket: {} with key: {}",
+      log.error("Fail to delete file from bucket {} with key {}: {}",
           storageDto.getBucketName(), storageDto.getKey(), e);
       throw new AwsStorageException(e.getMessage());
     }
@@ -234,8 +247,16 @@ public class AwsStorageService {
       deletePreviousVersions(bucket, key);
 
       log.info("Partial delete successfully.");
+
+      DeleteEventDto deleteEventDto = DeleteEventDto.builder()
+          .bucket(storageDto.getBucketName())
+          .key(storageDto.getKey())
+          .deleteType(DeleteType.PARTIAL)
+          .fixedFields(fixedFields)
+          .build();
+      awsSnsService.publishSnsDeleteEventTopic(deleteEventDto);
     } catch (Exception e) {
-      log.error("Fail to partial delete file from bucket: {} with key: {}",
+      log.error("Fail to partial delete file from bucket {} with key {}: {}",
           storageDto.getBucketName(), storageDto.getKey(), e);
       throw new AwsStorageException(e.getMessage());
     }
