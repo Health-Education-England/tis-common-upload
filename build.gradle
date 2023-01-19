@@ -11,7 +11,6 @@ plugins {
 
 group = "uk.nhs.hee.tis.common"
 version = "0.3.2"
-sourceCompatibility = "11"
 
 configurations {
   compileOnly {
@@ -28,31 +27,29 @@ dependencies {
   implementation "org.springframework.boot:spring-boot-starter-actuator"
   implementation "org.springframework.boot:spring-boot-starter-web"
   implementation "org.springframework.boot:spring-boot-starter-validation"
-  implementation 'com.amazonaws:aws-java-sdk-s3:1.12.351'
-  testImplementation("org.springframework.boot:spring-boot-starter-test") {
-    exclude group: "org.junit.vintage", module: "junit-vintage-engine"
-  }
+  implementation "com.amazonaws:aws-java-sdk-s3:1.12.351"
+  testImplementation "org.springframework.boot:spring-boot-starter-test"
 
   // Lombok
-  compileOnly 'org.projectlombok:lombok'
+  compileOnly "org.projectlombok:lombok"
   testCompileOnly "org.projectlombok:lombok"
   annotationProcessor "org.projectlombok:lombok"
   testAnnotationProcessor "org.projectlombok:lombok"
 
   // MapStruct
-  ext.mapstructVersion = '1.5.3.Final'
+  ext.mapstructVersion = "1.5.3.Final"
   implementation "org.mapstruct:mapstruct:$mapstructVersion"
   annotationProcessor "org.mapstruct:mapstruct-processor:$mapstructVersion"
   testAnnotationProcessor "org.mapstruct:mapstruct-processor:$mapstructVersion"
 
   // Sentry reporting
-  ext.sentryVersion = '6.9.0'
+  ext.sentryVersion = "6.9.0"
   implementation "io.sentry:sentry-spring-boot-starter:$sentryVersion"
   implementation "io.sentry:sentry-logback:$sentryVersion"
 
   implementation "net.datafaker:datafaker:1.7.0"
-  implementation 'commons-fileupload:commons-fileupload:1.4'
-  implementation 'commons-io:commons-io:2.11.0'
+  implementation "commons-fileupload:commons-fileupload:1.4"
+  implementation "commons-io:commons-io:2.11.0"
   implementation "commons-beanutils:commons-beanutils:1.9.4"
   implementation "org.apache.commons:commons-lang3:3.12.0"
 }
@@ -63,8 +60,15 @@ checkstyle {
 
 jacocoTestReport {
   reports {
-    html.enabled true
-    xml.enabled true
+    html.required = true
+    xml.required = true
+  }
+}
+
+java {
+  toolchain {
+    languageVersion = JavaLanguageVersion.of(11)
+    vendor = JvmVendorSpec.ADOPTIUM
   }
 }
 
@@ -81,33 +85,6 @@ sonarqube {
 }
 
 test {
-  testLogging {
-    exceptionFormat = 'full'
-  }
   finalizedBy jacocoTestReport
   useJUnitPlatform()
 }
-
-bootRun {
-  systemProperties System.properties
-}
-
-sourceSets {
-  integrationTest {
-    java.srcDir file('src/integrationTest/java')
-    resources.srcDir file('src/integrationTest/resources')
-    compileClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
-    runtimeClasspath += output + compileClasspath
-  }
-}
-
-task integrationTest(type: Test) {
-  useJUnitPlatform()
-  description = 'Runs the integration tests.'
-  group = 'verification'
-  testClassesDirs = sourceSets.integrationTest.output.classesDirs
-  classpath = sourceSets.integrationTest.runtimeClasspath
-  mustRunAfter test
-}
-
-check.dependsOn integrationTest
