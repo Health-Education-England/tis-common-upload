@@ -132,7 +132,7 @@ public class AwsStorageServiceTest {
   void setup() {
     s3Mock = mock(AmazonS3.class);
     snsMock = mock(AwsSnsService.class);
-    awsStorageService = new AwsStorageService(s3Mock, snsMock);
+    awsStorageService = new AwsStorageService(s3Mock, snsMock, new ObjectMapper());
 
     fileName = faker.lorem().characters(10);
     bucketName = faker.lorem().characters(10);

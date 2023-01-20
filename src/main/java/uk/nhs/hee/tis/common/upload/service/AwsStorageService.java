@@ -11,6 +11,8 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.model.S3VersionSummary;
+import com.amazonaws.services.s3.model.VersionListing;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -47,10 +49,12 @@ public class AwsStorageService {
   private static final String OBJECT_CONTENT_LIFE_CYCLE_STATE = "lifecycleState";
   private final AmazonS3 amazonS3;
   private final AwsSnsService awsSnsService;
+  private final ObjectMapper objectMapper;
 
-  AwsStorageService(AmazonS3 amazonS3, AwsSnsService awsSnsService) {
+  AwsStorageService(AmazonS3 amazonS3, AwsSnsService awsSnsService, ObjectMapper objectMapper) {
     this.amazonS3 = amazonS3;
     this.awsSnsService = awsSnsService;
+    this.objectMapper = objectMapper;
   }
 
   private static String getStringProperty(final FileSummaryDto o, final String name) {
@@ -175,7 +179,7 @@ public class AwsStorageService {
    * @throws AwsStorageException if there is a problem deleting the object
    */
   public void delete(final StorageDto storageDto) {
-    final var objectMetadata = amazonS3
+    final ObjectMetadata objectMetadata = amazonS3
         .getObjectMetadata(storageDto.getBucketName(), storageDto.getKey());
     String metaDeleteType = objectMetadata == null
         ? null : objectMetadata.getUserMetaDataOf(USER_METADATA_DELETE_TYPE);
@@ -210,17 +214,16 @@ public class AwsStorageService {
 
   private void partialDelete(final StorageDto storageDto, ObjectMetadata objectMetadata) {
     try {
-      final var bucket = storageDto.getBucketName();
-      final var key = storageDto.getKey();
+      final String bucket = storageDto.getBucketName();
+      final String key = storageDto.getKey();
 
       log.info("Partial delete file from bucket: {} with key: {}", bucket, key);
 
       // Object Content
-      final var fixedFields =
+      final String[] fixedFields =
           objectMetadata.getUserMetaDataOf(USER_METADATA_FIXED_FIELDS).split(",");
-      var strOriginalContent = getData(storageDto);
+      String strOriginalContent = getData(storageDto);
       if (objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE).equals("json")) {
-        ObjectMapper objectMapper = new ObjectMapper();
         JsonNode jsonNode = objectMapper.readTree(strOriginalContent);
 
         for (Iterator<String> fieldIterator = jsonNode.fieldNames(); fieldIterator.hasNext();) {
@@ -265,8 +268,8 @@ public class AwsStorageService {
   private void deletePreviousVersions(final String bucket, final String key) {
     if (amazonS3.getBucketVersioningConfiguration(bucket).getStatus().equals(
         BucketVersioningConfiguration.ENABLED)) {
-      final var versions = amazonS3.listVersions(bucket, key);
-      for (var version : versions.getVersionSummaries()) {
+      final VersionListing versions = amazonS3.listVersions(bucket, key);
+      for (S3VersionSummary version : versions.getVersionSummaries()) {
         if (!version.isLatest()) {
           amazonS3.deleteVersion(bucket, key, version.getVersionId());
         }

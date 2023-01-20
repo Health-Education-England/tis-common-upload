@@ -26,6 +26,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.services.sns.SnsClientBuilder;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.model.PublishRequest;
 import software.amazon.awssdk.services.sns.model.PublishResponse;
@@ -35,18 +36,22 @@ import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 @Slf4j
 @Service
 public class AwsSnsService {
-  private static SnsClient snsClient = SnsClient.create();
+
+  private final SnsClient snsClient;
 
   private final String deleteEventTopicArn;
+  private final ObjectMapper objectMapper;
 
-  AwsSnsService(@Value("${application.aws.sns.delete-event-topic}") String deleteEventTopicArn) {
+  AwsSnsService(@Value("${application.aws.sns.delete-event-topic}") String deleteEventTopicArn,
+      SnsClient snsClient,
+      ObjectMapper objectMapper) {
     this.deleteEventTopicArn = deleteEventTopicArn;
+    this.snsClient = snsClient;
+    this.objectMapper = objectMapper;
   }
 
   public void publishSnsDeleteEventTopic(DeleteEventDto deleteEventDto) {
     try {
-
-      ObjectMapper objectMapper = new ObjectMapper();
       JsonNode deleteEventJson = objectMapper.valueToTree(deleteEventDto);
 
       PublishRequest request = PublishRequest.builder()
@@ -55,8 +60,8 @@ public class AwsSnsService {
           .build();
 
       PublishResponse result = snsClient.publish(request);
-      log.info("Delete event (ID: {}) sent to SNS with status: {}",
-          result.messageId(), result.sdkHttpResponse().statusCode());
+      log.info("Delete event sent to SNS. Bucket: '{}'. Key: '{}'.",
+          deleteEventDto.getBucket(), deleteEventDto.getKey());
 
     } catch (SnsException e) {
       log.error("Fail to send to SNS topic: {}", e.awsErrorDetails().errorMessage());
