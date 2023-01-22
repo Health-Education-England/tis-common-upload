@@ -86,6 +86,10 @@ sonarqube {
 }
 
 test {
+  // to be remove when test is fixed
+  testLogging {
+    exceptionFormat = 'full'
+  }
   finalizedBy jacocoTestReport
   useJUnitPlatform()
 }
