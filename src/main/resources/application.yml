@@ -33,10 +33,3 @@ app:
 sentry:
   dsn: ${SENTRY_DSN:}
   environment: ${SENTRY_ENVIRONMENT:}
-
-application:
-  aws:
-    sqs:
-      regionCode: eu-west-2
-    sns:
-      delete-event-topic: ${SNS_DELETE_EVENT_TOPIC:sns-delete-event-topic}
