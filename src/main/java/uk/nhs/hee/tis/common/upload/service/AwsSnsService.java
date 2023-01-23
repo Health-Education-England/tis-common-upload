@@ -42,7 +42,7 @@ public class AwsSnsService {
   private final String deleteEventTopicArn;
   private final ObjectMapper objectMapper;
 
-  AwsSnsService(@Value("${application.aws.sns.delete-event-topic}") String deleteEventTopicArn,
+  AwsSnsService(@Value("${cloud.aws.sns.delete-event-topic}") String deleteEventTopicArn,
       SnsClient snsClient,
       ObjectMapper objectMapper) {
     this.deleteEventTopicArn = deleteEventTopicArn;
