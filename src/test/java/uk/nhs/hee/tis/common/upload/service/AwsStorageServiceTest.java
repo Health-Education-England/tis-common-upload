@@ -73,7 +73,7 @@ import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
 import uk.nhs.hee.tis.common.upload.enumeration.LifecycleState;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
-@SpringBootTest
+@SpringBootTest(properties = { "cloud.aws.region.static=eu-west-2" })
 @ExtendWith(MockitoExtension.class)
 public class AwsStorageServiceTest {
 

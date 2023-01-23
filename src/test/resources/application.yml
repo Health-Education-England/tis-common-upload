@@ -1,6 +1,0 @@
-cloud:
-  aws:
-    sns:
-      delete-event-topic: sns-delete-event-topic
-    region:
-      static: eu-west-2

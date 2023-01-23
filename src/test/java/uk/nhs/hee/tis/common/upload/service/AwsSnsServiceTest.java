@@ -40,7 +40,7 @@ import software.amazon.awssdk.services.sns.model.PublishRequest;
 import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
 
-@SpringBootTest
+@SpringBootTest(properties = { "cloud.aws.region.static=eu-west-2" })
 public class AwsSnsServiceTest {
 
   private static final String topicArn = "arn:aws:sns:eu-west-2:0000000:topic-arn";
