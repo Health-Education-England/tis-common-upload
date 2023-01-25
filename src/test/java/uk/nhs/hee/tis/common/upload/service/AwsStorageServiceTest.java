@@ -65,8 +65,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
@@ -74,7 +72,6 @@ import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
 import uk.nhs.hee.tis.common.upload.enumeration.LifecycleState;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
-@TestPropertySource(properties = {"cloud.aws.region.static=eu-west-2"})
 @ExtendWith(MockitoExtension.class)
 class AwsStorageServiceTest {
 
@@ -123,9 +120,6 @@ class AwsStorageServiceTest {
   private String key;
   private Map<String, String> customMetadata;
   private ObjectMetadata objectJsonMetadata;
-  private S3VersionSummary versionSummary1;
-  private S3VersionSummary versionSummary2;
-  private S3VersionSummary versionSummary3;
   private VersionListing versions;
   private BucketVersioningConfiguration bucketVersioningConfiguration;
 
@@ -142,7 +136,7 @@ class AwsStorageServiceTest {
     key = faker.lorem().characters(10);
     customMetadata = Map.of("answer", "42", "uploadedBy", "Marvin");
 
-    jsonFileContent =  "{\"id\":\"1\",\"lifecycleState\":\"SUBMITTED\",\"forename\":\"forename\"}";
+    jsonFileContent = "{\"id\":\"1\",\"lifecycleState\":\"SUBMITTED\",\"forename\":\"forename\"}";
 
     bucketVersioningConfiguration = new BucketVersioningConfiguration();
     bucketVersioningConfiguration.setStatus(BucketVersioningConfiguration.ENABLED);
@@ -153,15 +147,15 @@ class AwsStorageServiceTest {
     objectJsonMetadata.addUserMetadata("fixedfields", "id,lifecycleState");
     objectJsonMetadata.addUserMetadata("lifecyclestate", LifecycleState.SUBMITTED.name());
 
-    versionSummary1 = new S3VersionSummary();
+    S3VersionSummary versionSummary1 = new S3VersionSummary();
     versionSummary1.setVersionId("1");
     versionSummary1.setIsLatest(true);
 
-    versionSummary2 = new S3VersionSummary();
+    S3VersionSummary versionSummary2 = new S3VersionSummary();
     versionSummary2.setVersionId("2");
     versionSummary2.setIsLatest(false);
 
-    versionSummary3 = new S3VersionSummary();
+    S3VersionSummary versionSummary3 = new S3VersionSummary();
     versionSummary3.setVersionId("3");
     versionSummary3.setIsLatest(false);
     versions = new VersionListing();

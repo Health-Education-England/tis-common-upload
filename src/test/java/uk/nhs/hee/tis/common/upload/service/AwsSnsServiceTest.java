@@ -26,72 +26,48 @@ import static org.hamcrest.core.Is.is;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
+import com.amazonaws.services.sns.AmazonSNS;
+import com.amazonaws.services.sns.model.PublishRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import net.datafaker.Faker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.TestPropertySource;
-import org.springframework.test.util.ReflectionTestUtils;
-import software.amazon.awssdk.services.sns.SnsClient;
-import software.amazon.awssdk.services.sns.model.PublishRequest;
 import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
 
-@SpringBootTest
-@TestPropertySource(properties = {"cloud.aws.region.static=eu-west-2"})
 class AwsSnsServiceTest {
 
-  private static final String topicArn = "arn:aws:sns:eu-west-2:0000000:topic-arn";
-
-  private final Faker faker = new Faker();
+  private static final String TOPIC_ARN = "arn:aws:sns:eu-west-2:0000000:topic-arn";
 
   private AwsSnsService awsSnsService;
 
-  private SnsClient snsClientMock;
-
-  @Captor
-  ArgumentCaptor<PublishRequest> publishRequestCaptor;
-
-  private String bucketName;
-  private String key;
-  private DeleteEventDto deleteEventDto;
-  private JsonNode deleteEventJson;
+  private AmazonSNS snsClientMock;
 
   @BeforeEach
   void setup() {
-
-    snsClientMock = mock(SnsClient.class);
-    awsSnsService = new AwsSnsService(topicArn, snsClientMock, new ObjectMapper());
-
-    ReflectionTestUtils.setField(
-        awsSnsService, "deleteEventTopicArn", topicArn
-    );
-
-    bucketName = faker.lorem().characters(10);
-    key = faker.lorem().characters(10);
-
-    deleteEventDto = new DeleteEventDto();
-    deleteEventDto.setBucket(bucketName);
-    deleteEventDto.setKey(key);
-    deleteEventDto.setDeleteType(DeleteType.PARTIAL);
-
-    ObjectMapper objectMapper = new ObjectMapper();
-    deleteEventJson = objectMapper.valueToTree(deleteEventDto);
-
+    snsClientMock = mock(AmazonSNS.class);
+    awsSnsService = new AwsSnsService(TOPIC_ARN, snsClientMock, new ObjectMapper());
   }
 
   @Test
   void shouldPublishDeleteEventToSnsTopic() {
+    DeleteEventDto deleteEventDto = new DeleteEventDto();
+    deleteEventDto.setBucket("bucket-name");
+    deleteEventDto.setKey("file-to-delete.json");
+    deleteEventDto.setDeleteType(DeleteType.PARTIAL);
+
+    ObjectMapper objectMapper = new ObjectMapper();
+    JsonNode deleteEventJson = objectMapper.valueToTree(deleteEventDto);
 
     awsSnsService.publishSnsDeleteEventTopic(deleteEventDto);
 
-    verify(snsClientMock).publish(publishRequestCaptor.capture());
-    PublishRequest resultPubRequest = publishRequestCaptor.getValue();
-    assertThat("Unexpected message.", resultPubRequest.message(), is(deleteEventJson.toString()));
-    assertThat("Unexpected topic Arn.", resultPubRequest.topicArn(), is(topicArn));
+    ArgumentCaptor<PublishRequest> requestCaptor = ArgumentCaptor.forClass(PublishRequest.class);
+    verify(snsClientMock).publish(requestCaptor.capture());
+
+    PublishRequest resultPubRequest = requestCaptor.getValue();
+    assertThat("Unexpected message.", resultPubRequest.getMessage(),
+        is(deleteEventJson.toString()));
+    assertThat("Unexpected topic Arn.", resultPubRequest.getTopicArn(), is(TOPIC_ARN));
   }
 }

@@ -42,10 +42,8 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
-import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -56,9 +54,8 @@ import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
 
-@ExtendWith(MockitoExtension.class)
 @WebMvcTest(AwsStorageController.class)
-public class AwsStorageControllerTest {
+class AwsStorageControllerTest {
 
   private static final String STORAGE_URL = "/api/storage";
   private static final String UPLOAD = "/upload";
@@ -78,16 +75,15 @@ public class AwsStorageControllerTest {
   private String folderPath;
   private String bucketName;
   private String key;
-  private String fileName;
   private String metadataFileName;
   private String metadataFileType;
-  private ObjectMapper objectMapper = new ObjectMapper();
+  private final ObjectMapper objectMapper = new ObjectMapper();
 
   @BeforeEach
   void setup() {
     folderPath = "1/concern";
     bucketName = "tis-test-bucket";
-    fileName = "test.txt";
+    String fileName = "test.txt";
     key = folderPath + "/" + fileName;
     metadataFileName = fileName;
     metadataFileType = "txt";
@@ -99,11 +95,11 @@ public class AwsStorageControllerTest {
         "text/plain", "Spring Framework".getBytes());
 
     mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
-        .file(file)
-        .param("bucketName", bucketName)
-        .param("folderPath", folderPath)
-        .param("customMetadata[key]", "value")
-        .param("customMetadata[uploadDate]", "1992-08-07"))
+            .file(file)
+            .param("bucketName", bucketName)
+            .param("folderPath", folderPath)
+            .param("customMetadata[key]", "value")
+            .param("customMetadata[uploadDate]", "1992-08-07"))
         .andExpect(status().isOk());
 
     verify(storageServiceMock).upload(storageDtoCaptor.capture());
@@ -121,10 +117,10 @@ public class AwsStorageControllerTest {
         "text/plain", "Spring Framework".getBytes());
 
     mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
-        .file(file1)
-        .file(file2)
-        .param("bucketName", bucketName)
-        .param("folderPath", folderPath))
+            .file(file1)
+            .file(file2)
+            .param("bucketName", bucketName)
+            .param("folderPath", folderPath))
         .andExpect(status().isOk());
   }
 
@@ -134,8 +130,8 @@ public class AwsStorageControllerTest {
         "text/plain", "Spring Framework".getBytes());
 
     mockMvc.perform(multipart(STORAGE_URL + UPLOAD)
-        .file(file)
-        .param("folderPath", folderPath))
+            .file(file)
+            .param("folderPath", folderPath))
         .andExpect(status().is4xxClientError());
   }
 
@@ -144,8 +140,8 @@ public class AwsStorageControllerTest {
     final var content = "This is test file";
     when(storageServiceMock.download(any())).thenReturn(content.getBytes());
     mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
-        .param("bucketName", bucketName)
-        .param("key", key))
+            .param("bucketName", bucketName)
+            .param("key", key))
         .andExpect(status().isOk())
         .andExpect(content().string(content));
   }
@@ -154,7 +150,7 @@ public class AwsStorageControllerTest {
   void downloadFileShouldThrowExceptionWhenNoKeyProvided() throws Exception {
     when(storageServiceMock.download(any())).thenReturn("test".getBytes());
     mockMvc.perform(get(STORAGE_URL + DOWNLOAD)
-        .param("bucketName", bucketName))
+            .param("bucketName", bucketName))
         .andExpect(status().is4xxClientError());
   }
 
@@ -163,8 +159,8 @@ public class AwsStorageControllerTest {
     when(storageServiceMock.getData(storageDtoCaptor.capture())).thenReturn(
         "{\"table\": \"Concern\",  \"data\": {\"id\": 40,\"name\": \"Dolore, Harold\"}}");
     mockMvc.perform(get(STORAGE_URL + "/data")
-        .param("bucketName", bucketName)
-        .param("key", key))
+            .param("bucketName", bucketName)
+            .param("key", key))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.table", equalTo("Concern")))
         .andExpect(jsonPath("$.data.id", equalTo(40)))
@@ -180,8 +176,8 @@ public class AwsStorageControllerTest {
         .thenThrow(new AwsStorageException("Storage Exception"));
 
     mockMvc.perform(get(STORAGE_URL + "/data")
-        .param("bucketName", bucketName)
-        .param("key", key))
+            .param("bucketName", bucketName)
+            .param("key", key))
         .andExpect(status().is4xxClientError());
   }
 
@@ -195,9 +191,9 @@ public class AwsStorageControllerTest {
     when(storageServiceMock.listFiles(any(), eq(false), eq("interest.score,desc")))
         .thenReturn(fileSummaryDtoList);
     mockMvc.perform(get(STORAGE_URL + LIST)
-        .param("bucketName", bucketName)
-        .param("folderPath", folderPath)
-        .param("sort", "interest.score,desc"))
+            .param("bucketName", bucketName)
+            .param("folderPath", folderPath)
+            .param("sort", "interest.score,desc"))
         .andExpect(status().isOk())
         .andExpect(content().string(objectMapper.writeValueAsString(fileSummaryDtoList)));
   }
@@ -205,7 +201,7 @@ public class AwsStorageControllerTest {
   @Test
   void listAllFilesShouldThrowExceptionWhenFolderPathNotProvided() throws Exception {
     mockMvc.perform(get(STORAGE_URL + LIST)
-        .param("bucketName", bucketName))
+            .param("bucketName", bucketName))
         .andExpect(status().is4xxClientError());
   }
 
@@ -213,8 +209,8 @@ public class AwsStorageControllerTest {
   void shouldDeleteFile() throws Exception {
     final String content = "[" + key + "] deleted successfully.";
     mockMvc.perform(delete(STORAGE_URL + DELETE)
-        .param("bucketName", bucketName)
-        .param("key", key))
+            .param("bucketName", bucketName)
+            .param("key", key))
         .andExpect(status().isOk())
         .andExpect(content().string(content));
   }
@@ -224,8 +220,8 @@ public class AwsStorageControllerTest {
     doThrow(new AwsStorageException("Storage Exception"))
         .when(storageServiceMock).delete(storageDtoCaptor.capture());
     mockMvc.perform(delete(STORAGE_URL + DELETE)
-        .param("bucketName", bucketName)
-        .param("key", key))
+            .param("bucketName", bucketName)
+            .param("key", key))
         .andExpect(status().is4xxClientError());
     StorageDto expected = StorageDto.builder().bucketName(bucketName).key(key).build();
     assertEquals(expected, storageDtoCaptor.getValue());
@@ -234,7 +230,7 @@ public class AwsStorageControllerTest {
   @Test
   void deleteShouldThrowExceptionWhenKeyIsMissing() throws Exception {
     mockMvc.perform(get(STORAGE_URL + DELETE)
-        .param("bucketName", bucketName))
+            .param("bucketName", bucketName))
         .andExpect(status().is4xxClientError());
     verifyNoInteractions(storageServiceMock);
   }

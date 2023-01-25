@@ -37,6 +37,4 @@ sentry:
 cloud:
   aws:
     sns:
-      delete-event-topic: ${SNS_DELETE_EVENT_TOPIC:sns-delete-event-topic}
-    region:
-      static: ${AWS_REGION}
+      delete-event-topic: ${SNS_DELETE_EVENT_TOPIC_ARN:}
