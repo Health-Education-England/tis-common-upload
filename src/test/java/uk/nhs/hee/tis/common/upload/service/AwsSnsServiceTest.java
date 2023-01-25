@@ -34,14 +34,16 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.util.ReflectionTestUtils;
 import software.amazon.awssdk.services.sns.SnsClient;
 import software.amazon.awssdk.services.sns.model.PublishRequest;
 import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
 
-@SpringBootTest(properties = { "cloud.aws.region.static=eu-west-2" })
-public class AwsSnsServiceTest {
+@SpringBootTest
+@TestPropertySource(properties = {"cloud.aws.region.static=eu-west-2"})
+class AwsSnsServiceTest {
 
   private static final String topicArn = "arn:aws:sns:eu-west-2:0000000:topic-arn";
 

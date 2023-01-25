@@ -66,6 +66,7 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.web.multipart.MultipartFile;
 import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
@@ -73,9 +74,9 @@ import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
 import uk.nhs.hee.tis.common.upload.enumeration.LifecycleState;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
-@SpringBootTest(properties = { "cloud.aws.region.static=eu-west-2" })
+@TestPropertySource(properties = {"cloud.aws.region.static=eu-west-2"})
 @ExtendWith(MockitoExtension.class)
-public class AwsStorageServiceTest {
+class AwsStorageServiceTest {
 
   private final Faker faker = new Faker();
 
