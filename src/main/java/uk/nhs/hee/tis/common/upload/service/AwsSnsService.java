@@ -63,11 +63,11 @@ public class AwsSnsService {
    * @param deleteEventDto The delete event to publish.
    */
   public void publishSnsDeleteEventTopic(DeleteEventDto deleteEventDto) {
-      JsonNode deleteEventJson = objectMapper.valueToTree(deleteEventDto);
+    JsonNode deleteEventJson = objectMapper.valueToTree(deleteEventDto);
 
-      PublishRequest request = new PublishRequest()
-          .withMessage(deleteEventJson.toString())
-          .withTopicArn(deleteEventTopicArn);
+    PublishRequest request = new PublishRequest()
+        .withMessage(deleteEventJson.toString())
+        .withTopicArn(deleteEventTopicArn);
 
     try {
       snsClient.publish(request);

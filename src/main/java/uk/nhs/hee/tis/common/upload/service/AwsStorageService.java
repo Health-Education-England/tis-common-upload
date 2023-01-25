@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.ByteArrayInputStream;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
@@ -36,6 +37,9 @@ import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
 import uk.nhs.hee.tis.common.upload.enumeration.LifecycleState;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
+/**
+ * A service providing AWS storage functionality.
+ */
 @Slf4j
 @Service
 public class AwsStorageService {
@@ -130,7 +134,7 @@ public class AwsStorageService {
    */
   public String getData(StorageDto storageDto) {
     try (S3Object object = amazonS3.getObject(storageDto.getBucketName(), storageDto.getKey())) {
-      return IOUtils.toString(object.getObjectContent());
+      return IOUtils.toString(object.getObjectContent(), StandardCharsets.UTF_8);
     } catch (Exception e) {
       log.error("Unable to retrieve object from S3 as a String", e);
       throw new AwsStorageException(e.getMessage());
@@ -142,7 +146,8 @@ public class AwsStorageService {
    *
    * @param storageDto      holder for the bucket and folderPath (key prefix)
    * @param includeMetadata whether all custom metadata should be included
-   * @param sort            A sort key and direction, See https://docs.spring.io/spring-data/rest/docs/current/reference/html/#paging-and-sorting.sorting
+   * @param sort            A sort key and direction, See <a
+   *                        href="https://docs.spring.io/spring-data/rest/docs/current/reference/html/#paging-and-sorting.sorting">...</a>
    * @return a list of summaries for objects which were found
    */
   public List<FileSummaryDto> listFiles(final StorageDto storageDto,
@@ -183,7 +188,6 @@ public class AwsStorageService {
         .getObjectMetadata(storageDto.getBucketName(), storageDto.getKey());
     String metaDeleteType = objectMetadata == null
         ? null : objectMetadata.getUserMetaDataOf(USER_METADATA_DELETE_TYPE);
-
 
     if (metaDeleteType != null && metaDeleteType.equals(DeleteType.PARTIAL.name())) {
       partialDelete(storageDto, objectMetadata);
@@ -226,7 +230,7 @@ public class AwsStorageService {
       if (objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE).equals("json")) {
         JsonNode jsonNode = objectMapper.readTree(strOriginalContent);
 
-        for (Iterator<String> fieldIterator = jsonNode.fieldNames(); fieldIterator.hasNext();) {
+        for (Iterator<String> fieldIterator = jsonNode.fieldNames(); fieldIterator.hasNext(); ) {
           String fieldName = fieldIterator.next();
 
           if (!Set.of(fixedFields).contains(fieldName)) {
