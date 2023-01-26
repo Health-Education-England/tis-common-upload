@@ -23,10 +23,14 @@ package uk.nhs.hee.tis.common.upload.service;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.Is.is;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.amazonaws.services.sns.AmazonSNS;
+import com.amazonaws.services.sns.model.AmazonSNSException;
 import com.amazonaws.services.sns.model.PublishRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -69,5 +73,17 @@ class AwsSnsServiceTest {
     assertThat("Unexpected message.", resultPubRequest.getMessage(),
         is(deleteEventJson.toString()));
     assertThat("Unexpected topic Arn.", resultPubRequest.getTopicArn(), is(TOPIC_ARN));
+  }
+
+  @Test
+  void shouldThrowExceptionWhenFailToPublishToSnsTopic() {
+    DeleteEventDto deleteEventDto = new DeleteEventDto();
+    deleteEventDto.setBucket("bucket-name");
+    deleteEventDto.setKey("file-to-delete.json");
+    deleteEventDto.setDeleteType(DeleteType.PARTIAL);
+
+    when(snsClientMock.publish(any())).thenThrow(
+        AmazonSNSException.class);
+    assertDoesNotThrow(() -> awsSnsService.publishSnsDeleteEventTopic(deleteEventDto));
   }
 }

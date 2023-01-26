@@ -375,6 +375,18 @@ class AwsStorageServiceTest {
   }
 
   @Test
+  void shouldThrowExceptionWhenFailToPartialDeleteFile() {
+    final StorageDto storageDto = StorageDto.builder().bucketName(bucketName).key(key).build();
+    final S3Object s3Object = createObject(bucketName, key, jsonFileContent);
+
+    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
+
+    when(s3Mock.putObject(any())).thenThrow(AmazonServiceException.class);
+    assertThrows(AwsStorageException.class, () -> awsStorageService.delete(storageDto));
+  }
+
+  @Test
   void shouldNotUpdateFileContentIfPartialDeleteFileTypeNotJson() throws IOException {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key).build();
 
