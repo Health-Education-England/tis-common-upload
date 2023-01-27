@@ -198,7 +198,13 @@ public class AwsStorageService {
       hardDelete(storageDto);
     }
   }
-  
+
+  /**
+   * Delete the whole object from S3, and send delete event notification to SNS after deletion.
+   *
+   * @param storageDto holder for the bucket and object key
+   * @throws AwsStorageException if there is a problem deleting the object
+   */
   private void hardDelete(final StorageDto storageDto) {
     try {
       log.info("Remove file from bucket: {} with key: {}",
@@ -219,6 +225,16 @@ public class AwsStorageService {
     }
   }
 
+  /**
+   * Partial delete from object content, and send delete event notification to SNS after deletion.
+   * For json file type object, the fields matched with metadata `x-amz-meta-fixedfields` will stay,
+   * other fields will be removed from object content for the latest version.
+   * Previous version will be deleted. Lifecycle state in user metadata will change to `DELETED`.
+   *
+   * @param storageDto holder for the bucket and object key
+   * @param objectMetadata metadata of the object
+   * @throws AwsStorageException if there is a problem deleting the object
+   */
   private void partialDelete(final StorageDto storageDto, ObjectMetadata objectMetadata) {
     try {
       final String bucket = storageDto.getBucketName();
