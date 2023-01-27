@@ -179,6 +179,9 @@ public class AwsStorageService {
 
   /**
    * Delete the object identified by a key in a bucket.
+   * The type of delete is determined by the USER_METADATA_DELETE_TYPE field in object metadata.
+   * Partial delete will occur if USER_METADATA_DELETE_TYPE is set to DeleteType.PARTIAL,
+   * otherwise, hard delete will perform by default.
    *
    * @param storageDto holder for the bucket and object key
    * @throws AwsStorageException if there is a problem deleting the object
@@ -195,7 +198,7 @@ public class AwsStorageService {
       hardDelete(storageDto);
     }
   }
-
+  
   private void hardDelete(final StorageDto storageDto) {
     try {
       log.info("Remove file from bucket: {} with key: {}",
