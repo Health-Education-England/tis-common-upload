@@ -145,7 +145,7 @@ class AwsStorageServiceTest {
     objectJsonMetadata.addUserMetadata("type", "json");
     objectJsonMetadata.addUserMetadata("deletetype", DeleteType.PARTIAL.name());
     objectJsonMetadata.addUserMetadata("fixedfields", "id,lifecycleState");
-    objectJsonMetadata.addUserMetadata("lifecyclestate", LifecycleState.SUBMITTED.name());
+    objectJsonMetadata.addUserMetadata("lifecyclestate", "SUBMITTED");
 
     S3VersionSummary versionSummary1 = new S3VersionSummary();
     versionSummary1.setVersionId("1");
@@ -412,7 +412,7 @@ class AwsStorageServiceTest {
     Map<String, Object> resultJsonMap = mapper.readValue(resultInputStream, Map.class);
     assertThat("Unexpected input stream.", resultJsonMap.get("id"), is("1"));
     assertThat("Unexpected input stream.", resultJsonMap.get("lifecycleState"),
-        is(LifecycleState.SUBMITTED.name()));
+        is("SUBMITTED"));
     assertThat("Unexpected input stream.", resultJsonMap.get("forename"), is("forename"));
 
     final var resultUserMetadata = putObjectRequest.getMetadata().getUserMetadata();
