@@ -23,9 +23,11 @@ package uk.nhs.hee.tis.common.upload.enumeration;
 
 /**
  * An enumeration for object lifecycle state.
+ * DELETED state will be set in object's user metadata after partial delete.
+ * SUBMITTED state is used in TSS as trainee form status.
  */
 public enum LifecycleState {
 
-  SUBMITTED, UNSUBMITTED, DELETED;
+  DELETED, SUBMITTED;
 
 }
