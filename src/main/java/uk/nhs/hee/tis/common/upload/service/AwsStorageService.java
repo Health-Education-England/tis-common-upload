@@ -5,26 +5,41 @@ import static java.util.stream.Collectors.toList;
 import static org.apache.commons.io.FilenameUtils.getExtension;
 
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.model.BucketVersioningConfiguration;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectResult;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.amazonaws.services.s3.model.S3VersionSummary;
+import com.amazonaws.services.s3.model.VersionListing;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.io.ByteArrayInputStream;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.function.Function;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
+import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
+import uk.nhs.hee.tis.common.upload.enumeration.LifecycleState;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 
+/**
+ * A service providing AWS storage functionality.
+ */
 @Slf4j
 @Service
 public class AwsStorageService {
@@ -32,8 +47,19 @@ public class AwsStorageService {
   public static final String SORT_DELIM = ",";
   private static final String USER_METADATA_FILE_NAME = "name";
   private static final String USER_METADATA_FILE_TYPE = "type";
-  @Autowired
-  private AmazonS3 amazonS3;
+  private static final String USER_METADATA_DELETE_TYPE = "deletetype";
+  private static final String USER_METADATA_FIXED_FIELDS = "fixedfields";
+  private static final String USER_METADATA_LIFE_CYCLE_STATE = "lifecyclestate";
+  private static final String OBJECT_CONTENT_LIFE_CYCLE_STATE = "lifecycleState";
+  private final AmazonS3 amazonS3;
+  private final AwsSnsService awsSnsService;
+  private final ObjectMapper objectMapper;
+
+  AwsStorageService(AmazonS3 amazonS3, AwsSnsService awsSnsService, ObjectMapper objectMapper) {
+    this.amazonS3 = amazonS3;
+    this.awsSnsService = awsSnsService;
+    this.objectMapper = objectMapper;
+  }
 
   private static String getStringProperty(final FileSummaryDto o, final String name) {
     try {
@@ -108,7 +134,7 @@ public class AwsStorageService {
    */
   public String getData(StorageDto storageDto) {
     try (S3Object object = amazonS3.getObject(storageDto.getBucketName(), storageDto.getKey())) {
-      return IOUtils.toString(object.getObjectContent());
+      return IOUtils.toString(object.getObjectContent(), StandardCharsets.UTF_8);
     } catch (Exception e) {
       log.error("Unable to retrieve object from S3 as a String", e);
       throw new AwsStorageException(e.getMessage());
@@ -120,7 +146,8 @@ public class AwsStorageService {
    *
    * @param storageDto      holder for the bucket and folderPath (key prefix)
    * @param includeMetadata whether all custom metadata should be included
-   * @param sort            A sort key and direction, See https://docs.spring.io/spring-data/rest/docs/current/reference/html/#paging-and-sorting.sorting
+   * @param sort            A sort key and direction, See <a
+   *                        href="https://docs.spring.io/spring-data/rest/docs/current/reference/html/#paging-and-sorting.sorting">...</a>
    * @return a list of summaries for objects which were found
    */
   public List<FileSummaryDto> listFiles(final StorageDto storageDto,
@@ -152,20 +179,124 @@ public class AwsStorageService {
 
   /**
    * Delete the object identified by a key in a bucket.
+   * The type of delete is determined by the USER_METADATA_DELETE_TYPE field in object metadata.
+   * Partial delete will occur if USER_METADATA_DELETE_TYPE is set to DeleteType.PARTIAL,
+   * otherwise, hard delete will perform by default.
    *
    * @param storageDto holder for the bucket and object key
    * @throws AwsStorageException if there is a problem deleting the object
    */
   public void delete(final StorageDto storageDto) {
+    final ObjectMetadata objectMetadata = amazonS3
+        .getObjectMetadata(storageDto.getBucketName(), storageDto.getKey());
+    String metaDeleteType = objectMetadata == null
+        ? null : objectMetadata.getUserMetaDataOf(USER_METADATA_DELETE_TYPE);
+
+    if (metaDeleteType != null && metaDeleteType.equals(DeleteType.PARTIAL.name())) {
+      partialDelete(storageDto, objectMetadata);
+    } else {
+      hardDelete(storageDto);
+    }
+  }
+
+  /**
+   * Delete the whole object from S3, and send delete event notification to SNS after deletion.
+   *
+   * @param storageDto holder for the bucket and object key
+   * @throws AwsStorageException if there is a problem deleting the object
+   */
+  private void hardDelete(final StorageDto storageDto) {
     try {
-      log.info("Remove file: {} from bucket: {} with key: {}", storageDto.getKey(),
+      log.info("Remove file from bucket: {} with key: {}",
           storageDto.getBucketName(), storageDto.getKey());
       amazonS3.deleteObject(storageDto.getBucketName(), storageDto.getKey());
       log.info("File is removed successfully.");
+
+      DeleteEventDto deleteEventDto = DeleteEventDto.builder()
+          .bucket(storageDto.getBucketName())
+          .key(storageDto.getKey())
+          .deleteType(DeleteType.HARD)
+          .build();
+      awsSnsService.publishSnsDeleteEventTopic(deleteEventDto);
     } catch (Exception e) {
-      log.error("Fail to delete file from bucket: {} with key: {}",
+      log.error("Fail to delete file from bucket {} with key {}: {}",
           storageDto.getBucketName(), storageDto.getKey(), e);
       throw new AwsStorageException(e.getMessage());
+    }
+  }
+
+  /**
+   * Partial delete from object content, and send delete event notification to SNS after deletion.
+   * For json file type object, the fields matched with metadata `x-amz-meta-fixedfields` will stay,
+   * other fields will be removed from object content for the latest version.
+   * Previous version will be deleted. Lifecycle state in user metadata will change to `DELETED`.
+   *
+   * @param storageDto holder for the bucket and object key
+   * @param objectMetadata metadata of the object
+   * @throws AwsStorageException if there is a problem deleting the object
+   */
+  private void partialDelete(final StorageDto storageDto, ObjectMetadata objectMetadata) {
+    try {
+      final String bucket = storageDto.getBucketName();
+      final String key = storageDto.getKey();
+
+      log.info("Partial delete file from bucket: {} with key: {}", bucket, key);
+
+      // Object Content
+      final String[] fixedFields =
+          objectMetadata.getUserMetaDataOf(USER_METADATA_FIXED_FIELDS).split(",");
+      String strOriginalContent = getData(storageDto);
+      if (objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE).equals("json")) {
+        JsonNode jsonNode = objectMapper.readTree(strOriginalContent);
+
+        for (Iterator<String> fieldIterator = jsonNode.fieldNames(); fieldIterator.hasNext(); ) {
+          String fieldName = fieldIterator.next();
+
+          if (!Set.of(fixedFields).contains(fieldName)) {
+            fieldIterator.remove();
+          }
+        }
+        ((ObjectNode) jsonNode).put(OBJECT_CONTENT_LIFE_CYCLE_STATE,
+            LifecycleState.DELETED.name());
+        strOriginalContent = jsonNode.toString();
+      }
+      final var inputStream = new ByteArrayInputStream(strOriginalContent.getBytes());
+
+      // Metadata
+      objectMetadata.addUserMetadata(USER_METADATA_LIFE_CYCLE_STATE,
+          LifecycleState.DELETED.name());
+      objectMetadata.setContentLength(strOriginalContent.length());
+
+      final var request = new PutObjectRequest(bucket, key, inputStream, objectMetadata);
+      amazonS3.putObject(request);
+
+      deletePreviousVersions(bucket, key);
+
+      log.info("Partial delete successfully.");
+
+      DeleteEventDto deleteEventDto = DeleteEventDto.builder()
+          .bucket(storageDto.getBucketName())
+          .key(storageDto.getKey())
+          .deleteType(DeleteType.PARTIAL)
+          .fixedFields(fixedFields)
+          .build();
+      awsSnsService.publishSnsDeleteEventTopic(deleteEventDto);
+    } catch (Exception e) {
+      log.error("Fail to partial delete file from bucket {} with key {}: {}",
+          storageDto.getBucketName(), storageDto.getKey(), e);
+      throw new AwsStorageException(e.getMessage());
+    }
+  }
+
+  private void deletePreviousVersions(final String bucket, final String key) {
+    if (amazonS3.getBucketVersioningConfiguration(bucket).getStatus().equals(
+        BucketVersioningConfiguration.ENABLED)) {
+      final VersionListing versions = amazonS3.listVersions(bucket, key);
+      for (S3VersionSummary version : versions.getVersionSummaries()) {
+        if (!version.isLatest()) {
+          amazonS3.deleteVersion(bucket, key, version.getVersionId());
+        }
+      }
     }
   }
 
