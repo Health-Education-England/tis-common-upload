@@ -21,6 +21,7 @@
 
 package uk.nhs.hee.tis.common.upload.service;
 
+import static java.lang.String.format;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
@@ -164,23 +165,74 @@ class AwsStorageServiceTest {
 
   @Test
   void shouldUploadFile() throws IOException {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
+        .files(List.of(file1Mock, file2Mock)).customMetadata(customMetadata).build();
+    final var key = format("%s/%s", storageDto.getFolderPath(), fileName);
+
+    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
     when(file1Mock.getOriginalFilename()).thenReturn(fileName);
     when(file2Mock.getOriginalFilename()).thenReturn(fileName);
     when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
     when(file2Mock.getInputStream()).thenReturn(inputStreamMock);
     when(s3Mock.putObject(putRequestCaptor.capture())).thenReturn(resultMock);
 
-    final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
-        .files(List.of(file1Mock, file2Mock)).customMetadata(customMetadata).build();
     final var putObjectResult = awsStorageService.upload(storageDto);
 
     assertThat(putObjectResult, hasSize(2));
-    var actualUserMetadata = putRequestCaptor.getValue().getMetadata().getUserMetadata().entrySet();
-    customMetadata.entrySet().forEach(entry -> assertThat(actualUserMetadata, hasItem(entry)));
+    var actualUserMetadata = putRequestCaptor.getValue().getMetadata().getUserMetadata();
+    customMetadata.entrySet().forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
+    objectJsonMetadata.getUserMetadata().entrySet().stream()
+        .forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
+  }
+
+  @Test
+  void shouldUploadFileWithoutNewCustomMetadata() throws IOException {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
+        .files(List.of(file1Mock, file2Mock)).customMetadata(null).build();
+    final var key = format("%s/%s", storageDto.getFolderPath(), fileName);
+
+    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    when(file1Mock.getOriginalFilename()).thenReturn(fileName);
+    when(file2Mock.getOriginalFilename()).thenReturn(fileName);
+    when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
+    when(file2Mock.getInputStream()).thenReturn(inputStreamMock);
+    when(s3Mock.putObject(putRequestCaptor.capture())).thenReturn(resultMock);
+
+    final var putObjectResult = awsStorageService.upload(storageDto);
+
+    assertThat(putObjectResult, hasSize(2));
+    var actualUserMetadata = putRequestCaptor.getValue().getMetadata().getUserMetadata();
+    objectJsonMetadata.getUserMetadata().entrySet().stream()
+        .forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
+  }
+
+  @Test
+  void shouldCreateBucketIfNotExistWhenUpload() throws IOException {
+    final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
+        .files(List.of(file1Mock, file2Mock)).customMetadata(customMetadata).build();
+    final var key = format("%s/%s", storageDto.getFolderPath(), fileName);
+
+    when(s3Mock.doesBucketExistV2(bucketName)).thenReturn(false);
+    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    when(file1Mock.getOriginalFilename()).thenReturn(fileName);
+    when(file2Mock.getOriginalFilename()).thenReturn(fileName);
+    when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
+    when(file2Mock.getInputStream()).thenReturn(inputStreamMock);
+    when(s3Mock.putObject(putRequestCaptor.capture())).thenReturn(resultMock);
+
+    final var putObjectResult = awsStorageService.upload(storageDto);
+
+    verify(s3Mock).createBucket(bucketName);
+    assertThat(putObjectResult, hasSize(2));
+    var actualUserMetadata = putRequestCaptor.getValue().getMetadata().getUserMetadata();
+    customMetadata.entrySet().forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
+    objectJsonMetadata.getUserMetadata().entrySet().stream()
+        .forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
   }
 
   @Test
   void shouldHandleExceptionIfUploadFails() {
+    when(s3Mock.getObjectMetadata(any())).thenReturn(new ObjectMetadata());
     when(s3Mock.putObject(any())).thenThrow(AmazonServiceException.class);
 
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
