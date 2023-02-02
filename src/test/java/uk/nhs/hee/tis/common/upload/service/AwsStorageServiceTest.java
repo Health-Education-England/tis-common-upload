@@ -180,7 +180,8 @@ class AwsStorageServiceTest {
 
     assertThat(putObjectResult, hasSize(2));
     var actualUserMetadata = putRequestCaptor.getValue().getMetadata().getUserMetadata();
-    customMetadata.entrySet().forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
+    customMetadata.entrySet().forEach(entry ->
+        assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
     objectJsonMetadata.getUserMetadata().entrySet().stream()
         .forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
   }
@@ -224,7 +225,8 @@ class AwsStorageServiceTest {
 
     verify(s3Mock).createBucket(bucketName);
     assertThat(putObjectResult, hasSize(2));
-    var actualUserMetadata = putRequestCaptor.getValue().getMetadata().getUserMetadata();
+    var actualUserMetadata =
+        putRequestCaptor.getValue().getMetadata().getUserMetadata();
     customMetadata.entrySet().forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
     objectJsonMetadata.getUserMetadata().entrySet().stream()
         .forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
