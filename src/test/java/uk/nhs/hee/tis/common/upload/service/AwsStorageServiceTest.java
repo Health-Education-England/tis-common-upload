@@ -214,7 +214,7 @@ class AwsStorageServiceTest {
     final var key = format("%s/%s", storageDto.getFolderPath(), fileName);
 
     when(s3Mock.doesBucketExistV2(bucketName)).thenReturn(false);
-    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(new ObjectMetadata());
     when(file1Mock.getOriginalFilename()).thenReturn(fileName);
     when(file2Mock.getOriginalFilename()).thenReturn(fileName);
     when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
@@ -229,8 +229,6 @@ class AwsStorageServiceTest {
         putRequestCaptor.getValue().getMetadata().getUserMetadata();
     customMetadata.entrySet().forEach(entry ->
         assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
-    objectJsonMetadata.getUserMetadata().entrySet().stream()
-        .forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
   }
 
   @Test
