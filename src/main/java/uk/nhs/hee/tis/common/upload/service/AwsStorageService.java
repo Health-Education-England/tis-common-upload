@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.function.Function;
@@ -80,21 +81,30 @@ public class AwsStorageService {
     final var bucketName = storageDto.getBucketName();
     final var folderPath = storageDto.getFolderPath();
     final var files = storageDto.getFiles();
+    final var customMetadata = storageDto.getCustomMetadata();
 
     createBucketIfNotExist(bucketName);
 
     return files.stream().map(file -> {
       try {
         final var key = format("%s/%s", folderPath, file.getOriginalFilename());
-        final var metadata = new ObjectMetadata();
-        if (storageDto.getCustomMetadata() != null) {
-          metadata.getUserMetadata().putAll(storageDto.getCustomMetadata());
+
+        final ObjectMetadata metadata = amazonS3
+            .getObjectMetadata(bucketName, key);
+        if (customMetadata != null) {
+          for (Map.Entry<String, String> entry : customMetadata.entrySet()) {
+            log.info("key: {}, value: {}", entry.getKey(), entry.getValue());
+            metadata.addUserMetadata(entry.getKey(), entry.getValue());
+          }
         }
         metadata.addUserMetadata(USER_METADATA_FILE_NAME, file.getOriginalFilename());
         metadata.addUserMetadata(USER_METADATA_FILE_TYPE, getExtension(file.getOriginalFilename()));
+        metadata.setContentLength(file.getSize());
+
         final var request = new PutObjectRequest(bucketName, key, file.getInputStream(), metadata);
         log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
         return amazonS3.putObject(request);
+
       } catch (Exception e) {
         log.error("Failed to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName,
             e);
