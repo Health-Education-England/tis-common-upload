@@ -9,8 +9,6 @@ jobs:
   build:
     uses: health-education-england/.github/.github/workflows/build-gradle.yml@main
     secrets:
-      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       sonar-token: ${{ secrets.SONAR_TOKEN }}
 
   deploy-core-preprod:
@@ -20,9 +18,6 @@ jobs:
       cluster-prefix: tis
       environment: preprod
       service-name: tis-core-common-upload
-    secrets:
-      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   deploy-core-prod:
     needs: deploy-core-preprod
@@ -31,9 +26,6 @@ jobs:
       cluster-prefix: tis
       environment: prod
       service-name: tis-core-common-upload
-    secrets:
-      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   deploy-reval-preprod:
     needs: build
@@ -42,9 +34,6 @@ jobs:
       cluster-prefix: revalidation
       environment: preprod
       service-name: tis-common-upload
-    secrets:
-      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
   deploy-reval-prod:
     needs: deploy-reval-preprod
@@ -53,6 +42,3 @@ jobs:
       cluster-prefix: revalidation
       environment: prod
       service-name: tis-common-upload
-    secrets:
-      ecr-username: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      ecr-password: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
