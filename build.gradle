@@ -30,7 +30,7 @@ dependencies {
   testImplementation "org.springframework.boot:spring-boot-starter-test"
 
   implementation "com.amazonaws:aws-java-sdk-s3:1.12.420"
-  implementation "io.awspring.cloud:spring-cloud-starter-aws-messaging:2.4.2"
+  implementation "io.awspring.cloud:spring-cloud-starter-aws-messaging:2.4.4"
 
   // Lombok
   compileOnly "org.projectlombok:lombok"
