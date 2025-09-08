@@ -39,7 +39,7 @@ dependencies {
   testAnnotationProcessor "org.projectlombok:lombok"
 
   // MapStruct
-  ext.mapstructVersion = "1.5.5.Final"
+  ext.mapstructVersion = "1.6.3"
   implementation "org.mapstruct:mapstruct:$mapstructVersion"
   annotationProcessor "org.mapstruct:mapstruct-processor:$mapstructVersion"
   testAnnotationProcessor "org.mapstruct:mapstruct-processor:$mapstructVersion"
