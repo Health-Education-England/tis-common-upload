@@ -21,14 +21,14 @@
 
 package uk.nhs.hee.tis.common.upload.service;
 
-import com.amazonaws.services.sns.AmazonSNS;
-import com.amazonaws.services.sns.model.AmazonSNSException;
-import com.amazonaws.services.sns.model.PublishRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.services.sns.SnsClient;
+import software.amazon.awssdk.services.sns.model.PublishRequest;
+import software.amazon.awssdk.services.sns.model.SnsException;
 import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 
 /**
@@ -38,7 +38,7 @@ import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 @Service
 public class AwsSnsService {
 
-  private final AmazonSNS snsClient;
+  private final SnsClient snsClient;
 
   private final String deleteEventTopicArn;
   private final ObjectMapper objectMapper;
@@ -51,7 +51,7 @@ public class AwsSnsService {
    * @param objectMapper        The mapper to convert delete events to SNS messages.
    */
   AwsSnsService(@Value("${cloud.aws.sns.delete-event-topic}") String deleteEventTopicArn,
-      AmazonSNS snsClient, ObjectMapper objectMapper) {
+      SnsClient snsClient, ObjectMapper objectMapper) {
     this.deleteEventTopicArn = deleteEventTopicArn;
     this.snsClient = snsClient;
     this.objectMapper = objectMapper;
@@ -65,15 +65,16 @@ public class AwsSnsService {
   public void publishSnsDeleteEventTopic(DeleteEventDto deleteEventDto) {
     JsonNode deleteEventJson = objectMapper.valueToTree(deleteEventDto);
 
-    PublishRequest request = new PublishRequest()
-        .withMessage(deleteEventJson.toString())
-        .withTopicArn(deleteEventTopicArn);
+    PublishRequest request = PublishRequest.builder()
+        .message(deleteEventJson.toString())
+        .topicArn(deleteEventTopicArn)
+        .build();
 
     try {
       snsClient.publish(request);
       log.info("Delete event sent to SNS. Bucket: '{}'. Key: '{}'.",
           deleteEventDto.getBucket(), deleteEventDto.getKey());
-    } catch (AmazonSNSException e) {
+    } catch (SnsException e) {
       String message = String.format("Failed to send to SNS topic '%s'", deleteEventTopicArn);
       log.error(message, e);
     }

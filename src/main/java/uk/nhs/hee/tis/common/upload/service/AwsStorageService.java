@@ -4,15 +4,6 @@ import static java.lang.String.format;
 import static java.util.stream.Collectors.toList;
 import static org.apache.commons.io.FilenameUtils.getExtension;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.BucketVersioningConfiguration;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.model.PutObjectResult;
-import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.amazonaws.services.s3.model.S3VersionSummary;
-import com.amazonaws.services.s3.model.VersionListing;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -20,6 +11,7 @@ import java.io.ByteArrayInputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.StandardCharsets;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -31,6 +23,26 @@ import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.BucketVersioningStatus;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetBucketVersioningRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectVersionsResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsRequest;
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+import software.amazon.awssdk.services.s3.model.ObjectVersion;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Object;
 import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.dto.FileSummaryDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
@@ -52,11 +64,11 @@ public class AwsStorageService {
   private static final String USER_METADATA_FIXED_FIELDS = "fixedfields";
   private static final String USER_METADATA_LIFE_CYCLE_STATE = "lifecyclestate";
   private static final String OBJECT_CONTENT_LIFE_CYCLE_STATE = "lifecycleState";
-  private final AmazonS3 amazonS3;
+  private final S3Client amazonS3;
   private final AwsSnsService awsSnsService;
   private final ObjectMapper objectMapper;
 
-  AwsStorageService(AmazonS3 amazonS3, AwsSnsService awsSnsService, ObjectMapper objectMapper) {
+  AwsStorageService(S3Client amazonS3, AwsSnsService awsSnsService, ObjectMapper objectMapper) {
     this.amazonS3 = amazonS3;
     this.awsSnsService = awsSnsService;
     this.objectMapper = objectMapper;
@@ -77,7 +89,7 @@ public class AwsStorageService {
    * @param storageDto representation of files to be uploaded to S3
    * @return result of attempts to store the objects
    */
-  public List<PutObjectResult> upload(final StorageDto storageDto) {
+  public List<PutObjectResponse> upload(final StorageDto storageDto) {
     final var bucketName = storageDto.getBucketName();
     final var folderPath = storageDto.getFolderPath();
     final var files = storageDto.getFiles();
@@ -89,28 +101,31 @@ public class AwsStorageService {
       try {
         final var key = format("%s/%s", folderPath, file.getOriginalFilename());
 
-        final ObjectMetadata metadata = amazonS3
-            .getObjectMetadata(bucketName, key);
+        final HeadObjectResponse head = amazonS3
+            .headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+                .build());
+        Map<String, String> metadata = new HashMap<>(head.metadata());
         if (customMetadata != null) {
-          for (Map.Entry<String, String> entry : customMetadata.entrySet()) {
-            log.info("key: {}, value: {}", entry.getKey(), entry.getValue());
-            metadata.addUserMetadata(entry.getKey(), entry.getValue());
-          }
+          metadata.putAll(customMetadata);
         }
-        metadata.addUserMetadata(USER_METADATA_FILE_NAME, file.getOriginalFilename());
-        metadata.addUserMetadata(USER_METADATA_FILE_TYPE, getExtension(file.getOriginalFilename()));
-        metadata.setContentLength(file.getSize());
+        metadata.put(USER_METADATA_FILE_NAME, file.getOriginalFilename());
+        metadata.put(
+            USER_METADATA_FILE_TYPE,
+            getExtension(file.getOriginalFilename())
+        );
 
-        final var request = new PutObjectRequest(bucketName, key, file.getInputStream(), metadata);
+        PutObjectRequest request = PutObjectRequest.builder().bucket(bucketName).key(key)
+            .metadata(metadata).contentLength(file.getSize()).build();
+
         log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
-        return amazonS3.putObject(request);
+        return amazonS3.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
 
       } catch (Exception e) {
         log.error("Failed to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName,
             e);
         throw new AwsStorageException(e.getMessage());
       }
-    }).collect(toList());
+    }).toList();
   }
 
   /**
@@ -123,12 +138,13 @@ public class AwsStorageService {
     try {
       log.info("Download file: {} from bucket: {} with key: {}", storageDto.getKey(),
           storageDto.getBucketName(), storageDto.getKey());
-      final var s3Object = amazonS3.getObject(storageDto.getBucketName(), storageDto.getKey());
-      final var inputStream = s3Object.getObjectContent();
-      final var content = IOUtils.toByteArray(inputStream);
-      log.info("File downloaded successfully.");
-      s3Object.close();
-      return content;
+      GetObjectRequest request = GetObjectRequest.builder().bucket(storageDto.getBucketName()).key(storageDto.getKey()).build();
+
+      try (ResponseInputStream<GetObjectResponse> s3Object = amazonS3.getObject(request)) {
+        byte[] content = s3Object.readAllBytes();
+        log.info("File downloaded successfully.");
+        return content;
+      }
     } catch (Exception e) {
       log.error("Fail to download file: {} from bucket: {}", storageDto.getKey(),
           storageDto.getBucketName(), e);
@@ -143,8 +159,10 @@ public class AwsStorageService {
    * @return text string of the object content
    */
   public String getData(StorageDto storageDto) {
-    try (S3Object object = amazonS3.getObject(storageDto.getBucketName(), storageDto.getKey())) {
-      return IOUtils.toString(object.getObjectContent(), StandardCharsets.UTF_8);
+    try (ResponseInputStream<GetObjectResponse> object = amazonS3.getObject(
+        GetObjectRequest.builder().bucket(storageDto.getBucketName()).key(storageDto.getKey())
+            .build())) {
+      return IOUtils.toString(object, StandardCharsets.UTF_8);
     } catch (Exception e) {
       log.error("Unable to retrieve object from S3 as a String", e);
       throw new AwsStorageException(e.getMessage());
@@ -162,11 +180,14 @@ public class AwsStorageService {
    */
   public List<FileSummaryDto> listFiles(final StorageDto storageDto,
       final boolean includeMetadata, final String sort) {
+    String bucketName = storageDto.getBucketName();
     try {
       final var listObjects = amazonS3
-          .listObjects(storageDto.getBucketName(), storageDto.getFolderPath() + "/");
-      var fileSummaryList = listObjects.getObjectSummaries().stream()
-          .map(summary -> buildFileSummary(summary, includeMetadata)).collect(toList());
+          .listObjects(ListObjectsRequest.builder().bucket(bucketName)
+              .prefix(storageDto.getFolderPath() + "/")
+              .build());
+      var fileSummaryList = listObjects.contents().stream()
+          .map(summary -> buildFileSummary(summary, bucketName, includeMetadata)).collect(toList());
 
       if (StringUtils.isNotBlank(sort) && sort.split(SORT_DELIM).length < 3) {
         String[] sortEntry = sort.split(SORT_DELIM);
@@ -182,7 +203,7 @@ public class AwsStorageService {
       return fileSummaryList;
     } catch (Exception e) {
       log.error("Fail to list files from bucket: {} with folderPath: {}",
-          storageDto.getBucketName(), storageDto.getFolderPath(), e);
+          bucketName, storageDto.getFolderPath(), e);
       throw new AwsStorageException(e.getMessage());
     }
   }
@@ -197,13 +218,17 @@ public class AwsStorageService {
    * @throws AwsStorageException if there is a problem deleting the object
    */
   public void delete(final StorageDto storageDto) {
-    final ObjectMetadata objectMetadata = amazonS3
-        .getObjectMetadata(storageDto.getBucketName(), storageDto.getKey());
-    String metaDeleteType = objectMetadata == null
-        ? null : objectMetadata.getUserMetaDataOf(USER_METADATA_DELETE_TYPE);
+    final HeadObjectResponse head = amazonS3
+        .headObject(
+            HeadObjectRequest.builder().bucket(storageDto.getBucketName()).key(storageDto.getKey())
+                .build());
+    Map<String, String> metadata = head.metadata();
+    String metaDeleteType = metadata == null
+        ? null
+        : metadata.get(USER_METADATA_DELETE_TYPE);
 
     if (metaDeleteType != null && metaDeleteType.equals(DeleteType.PARTIAL.name())) {
-      partialDelete(storageDto, objectMetadata);
+      partialDelete(storageDto, metadata);
     } else {
       hardDelete(storageDto);
     }
@@ -219,7 +244,9 @@ public class AwsStorageService {
     try {
       log.info("Remove file from bucket: {} with key: {}",
           storageDto.getBucketName(), storageDto.getKey());
-      amazonS3.deleteObject(storageDto.getBucketName(), storageDto.getKey());
+      amazonS3.deleteObject(
+          DeleteObjectRequest.builder().bucket(storageDto.getBucketName()).key(storageDto.getKey())
+              .build());
       log.info("File is removed successfully.");
 
       DeleteEventDto deleteEventDto = DeleteEventDto.builder()
@@ -242,10 +269,10 @@ public class AwsStorageService {
    * Previous version will be deleted. Lifecycle state in user metadata will change to `DELETED`.
    *
    * @param storageDto holder for the bucket and object key
-   * @param objectMetadata metadata of the object
+   * @param originalMetadata metadata of the object
    * @throws AwsStorageException if there is a problem deleting the object
    */
-  private void partialDelete(final StorageDto storageDto, ObjectMetadata objectMetadata) {
+  private void partialDelete(final StorageDto storageDto, Map<String, String> originalMetadata) {
     try {
       final String bucket = storageDto.getBucketName();
       final String key = storageDto.getKey();
@@ -253,10 +280,9 @@ public class AwsStorageService {
       log.info("Partial delete file from bucket: {} with key: {}", bucket, key);
 
       // Object Content
-      final String[] fixedFields =
-          objectMetadata.getUserMetaDataOf(USER_METADATA_FIXED_FIELDS).split(",");
+      final String[] fixedFields = originalMetadata.get(USER_METADATA_FIXED_FIELDS).split(",");
       String strOriginalContent = getData(storageDto);
-      if (objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE).equals("json")) {
+      if (originalMetadata.get(USER_METADATA_FILE_TYPE).equals("json")) {
         JsonNode jsonNode = objectMapper.readTree(strOriginalContent);
 
         for (Iterator<String> fieldIterator = jsonNode.fieldNames(); fieldIterator.hasNext(); ) {
@@ -273,12 +299,13 @@ public class AwsStorageService {
       final var inputStream = new ByteArrayInputStream(strOriginalContent.getBytes());
 
       // Metadata
-      objectMetadata.addUserMetadata(USER_METADATA_LIFE_CYCLE_STATE,
-          LifecycleState.DELETED.name());
-      objectMetadata.setContentLength(strOriginalContent.length());
+      Map<String, String> newMetadata = new HashMap<>(originalMetadata);
+      newMetadata.put(USER_METADATA_LIFE_CYCLE_STATE, LifecycleState.DELETED.name());
 
-      final var request = new PutObjectRequest(bucket, key, inputStream, objectMetadata);
-      amazonS3.putObject(request);
+      long contentLength = strOriginalContent.length();
+      final var request = PutObjectRequest.builder().bucket(bucket).key(key).metadata(newMetadata)
+          .contentLength(contentLength).build();
+      amazonS3.putObject(request, RequestBody.fromInputStream(inputStream, contentLength));
 
       deletePreviousVersions(bucket, key);
 
@@ -299,34 +326,46 @@ public class AwsStorageService {
   }
 
   private void deletePreviousVersions(final String bucket, final String key) {
-    if (amazonS3.getBucketVersioningConfiguration(bucket).getStatus().equals(
-        BucketVersioningConfiguration.ENABLED)) {
-      final VersionListing versions = amazonS3.listVersions(bucket, key);
-      for (S3VersionSummary version : versions.getVersionSummaries()) {
+    var status = amazonS3.getBucketVersioning(GetBucketVersioningRequest.builder().bucket(bucket)
+        .build()).status();
+    if (status != null && status.equals(BucketVersioningStatus.ENABLED)) {
+      final ListObjectVersionsResponse versions = amazonS3.listObjectVersions(
+          ListObjectVersionsRequest.builder().bucket(bucket).prefix(key)
+              .build());
+      for (ObjectVersion version : versions.versions()) {
         if (!version.isLatest()) {
-          amazonS3.deleteVersion(bucket, key, version.getVersionId());
+          amazonS3.deleteObject(
+              DeleteObjectRequest.builder().bucket(bucket).key(key).versionId(version.versionId())
+                  .build());
         }
       }
     }
   }
 
   private void createBucketIfNotExist(final String bucketName) {
-    if (!amazonS3.doesBucketExistV2(bucketName)) {
-      amazonS3.createBucket(bucketName);
+      try {
+        amazonS3.headBucket(HeadBucketRequest.builder().bucket(bucketName).build());
+        return;
+      } catch (NoSuchBucketException e) {
+        // expected
+      }
+      amazonS3.createBucket(CreateBucketRequest.builder().bucket(bucketName)
+            .build());
     }
-  }
 
-  private FileSummaryDto buildFileSummary(final S3ObjectSummary summary,
+  private FileSummaryDto buildFileSummary(final S3Object summary, final String bucketName,
       final boolean includeCustomMetadata) {
-    final var objectMetadata = amazonS3
-        .getObjectMetadata(summary.getBucketName(), summary.getKey());
-    log.debug("Metadata details for file:{}, Metadata: {}", summary.getKey(), objectMetadata);
+    final var head = amazonS3
+        .headObject(HeadObjectRequest.builder().bucket(bucketName).key(summary.key())
+            .build());
+    var metadata = head.metadata();
+    log.debug("Metadata details for file:{}, Metadata: {}", summary.key(), metadata);
     return FileSummaryDto.builder()
-        .bucketName(summary.getBucketName())
-        .key(summary.getKey())
-        .fileName(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_NAME))
-        .fileType(objectMetadata.getUserMetaDataOf(USER_METADATA_FILE_TYPE))
-        .customMetadata(includeCustomMetadata ? objectMetadata.getUserMetadata() : null)
+        .bucketName(bucketName)
+        .key(summary.key())
+        .fileName(metadata.get(USER_METADATA_FILE_NAME))
+        .fileType(metadata.get(USER_METADATA_FILE_TYPE))
+        .customMetadata(includeCustomMetadata ? metadata : null)
         .build();
   }
 }

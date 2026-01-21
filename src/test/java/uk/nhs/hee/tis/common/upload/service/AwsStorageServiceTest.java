@@ -37,22 +37,11 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.BucketVersioningConfiguration;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.model.PutObjectResult;
-import com.amazonaws.services.s3.model.S3Object;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.amazonaws.services.s3.model.S3VersionSummary;
-import com.amazonaws.services.s3.model.VersionListing;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import net.datafaker.Faker;
@@ -67,6 +56,29 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.web.multipart.MultipartFile;
+import software.amazon.awssdk.awscore.exception.AwsServiceException;
+import software.amazon.awssdk.core.ResponseInputStream;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.model.BucketVersioningStatus;
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetBucketVersioningRequest;
+import software.amazon.awssdk.services.s3.model.GetBucketVersioningResponse;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectResponse;
+import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectVersionsRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectVersionsResponse;
+import software.amazon.awssdk.services.s3.model.ListObjectsRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsResponse;
+import software.amazon.awssdk.services.s3.model.NoSuchBucketException;
+import software.amazon.awssdk.services.s3.model.ObjectVersion;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.PutObjectResponse;
+import software.amazon.awssdk.services.s3.model.S3Object;
 import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
@@ -80,7 +92,7 @@ class AwsStorageServiceTest {
 
   private AwsStorageService awsStorageService;
 
-  private AmazonS3 s3Mock;
+  private S3Client s3Mock;
 
   private AwsSnsService snsMock;
 
@@ -93,25 +105,14 @@ class AwsStorageServiceTest {
   @Mock
   private InputStream inputStreamMock;
 
-  @Mock
-  private PutObjectResult resultMock;
-
-  @Mock
-  private ObjectListing objectListingMock;
-
-  @Mock
-  private ObjectMetadata metadataMock;
-  @Mock
-  private ObjectMetadata metadataMock2;
-  @Mock
-  private ObjectMetadata metadataMock3;
-  @Mock
-  private ObjectMetadata metadataMock4;
-
   @Captor
   private ArgumentCaptor<PutObjectRequest> putRequestCaptor;
   @Captor
   private ArgumentCaptor<DeleteEventDto> deleteEventCaptor;
+  @Captor
+  private ArgumentCaptor<HeadBucketRequest> headBucketRequestCaptor;
+  @Captor
+  private ArgumentCaptor<RequestBody> requestBodyCaptor;
 
   private String fileName;
   private String bucketName;
@@ -120,17 +121,18 @@ class AwsStorageServiceTest {
   private String jsonFileContent;
   private String key;
   private Map<String, String> customMetadata;
-  private ObjectMetadata objectJsonMetadata;
-  private VersionListing versions;
-  private BucketVersioningConfiguration bucketVersioningConfiguration;
+  private HeadObjectResponse headObjectResponse;
+  private ListObjectVersionsResponse versions;
+  private GetBucketVersioningResponse getBucketVersioningResponse;
+  private PutObjectResponse putObjectResponse;
 
   @BeforeEach
   void setup() {
-    s3Mock = mock(AmazonS3.class);
+    s3Mock = mock(S3Client.class);
     snsMock = mock(AwsSnsService.class);
     awsStorageService = new AwsStorageService(s3Mock, snsMock, new ObjectMapper());
 
-    fileName = faker.lorem().characters(10);
+    fileName = faker.lorem().characters(10) + ".json";
     bucketName = faker.lorem().characters(10);
     folderName = faker.lorem().characters(10);
     fileContent = faker.lorem().sentence(5);
@@ -139,50 +141,58 @@ class AwsStorageServiceTest {
 
     jsonFileContent = "{\"id\":\"1\",\"lifecycleState\":\"SUBMITTED\",\"forename\":\"forename\"}";
 
-    bucketVersioningConfiguration = new BucketVersioningConfiguration();
-    bucketVersioningConfiguration.setStatus(BucketVersioningConfiguration.ENABLED);
+    getBucketVersioningResponse = GetBucketVersioningResponse.builder()
+        .status(BucketVersioningStatus.ENABLED).build();
+    putObjectResponse = PutObjectResponse.builder().build();
 
-    objectJsonMetadata = new ObjectMetadata();
-    objectJsonMetadata.addUserMetadata("type", "json");
-    objectJsonMetadata.addUserMetadata("deletetype", DeleteType.PARTIAL.name());
-    objectJsonMetadata.addUserMetadata("fixedfields", "id,lifecycleState");
-    objectJsonMetadata.addUserMetadata("lifecyclestate", "SUBMITTED");
+    Map<String, String> metadata = new HashMap<>();
+    metadata.put("type", "json");
+    metadata.put("deletetype", DeleteType.PARTIAL.name());
+    metadata.put("fixedfields", "id,lifecycleState");
+    metadata.put("lifecyclestate", "SUBMITTED");
+    headObjectResponse = HeadObjectResponse.builder().metadata(metadata).build();
 
-    S3VersionSummary versionSummary1 = new S3VersionSummary();
-    versionSummary1.setVersionId("1");
-    versionSummary1.setIsLatest(true);
+    ObjectVersion versionSummary1 = ObjectVersion.builder()
+        .versionId("1")
+        .isLatest(true)
+        .build();
 
-    S3VersionSummary versionSummary2 = new S3VersionSummary();
-    versionSummary2.setVersionId("2");
-    versionSummary2.setIsLatest(false);
+    ObjectVersion versionSummary2 = ObjectVersion.builder()
+        .versionId("2")
+        .isLatest(false)
+        .build();
 
-    S3VersionSummary versionSummary3 = new S3VersionSummary();
-    versionSummary3.setVersionId("3");
-    versionSummary3.setIsLatest(false);
-    versions = new VersionListing();
-    versions.setVersionSummaries(List.of(versionSummary1, versionSummary2, versionSummary3));
+    ObjectVersion versionSummary3 = ObjectVersion.builder()
+        .versionId("3")
+        .isLatest(false)
+        .build();
+    versions = ListObjectVersionsResponse.builder()
+        .versions(List.of(versionSummary1, versionSummary2, versionSummary3))
+        .build();
   }
 
   @Test
   void shouldUploadFile() throws IOException {
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .files(List.of(file1Mock, file2Mock)).customMetadata(customMetadata).build();
-    final var key = format("%s/%s", storageDto.getFolderPath(), fileName);
+    key = format("%s/%s", storageDto.getFolderPath(), fileName);
 
-    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(headObjectResponse);
     when(file1Mock.getOriginalFilename()).thenReturn(fileName);
     when(file2Mock.getOriginalFilename()).thenReturn(fileName);
     when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
     when(file2Mock.getInputStream()).thenReturn(inputStreamMock);
-    when(s3Mock.putObject(putRequestCaptor.capture())).thenReturn(resultMock);
+    when(s3Mock.putObject(putRequestCaptor.capture(), any(RequestBody.class))).thenReturn(
+        putObjectResponse);
 
     final var putObjectResult = awsStorageService.upload(storageDto);
 
     assertThat(putObjectResult, hasSize(2));
-    var actualUserMetadata = putRequestCaptor.getValue().getMetadata().getUserMetadata();
+    var actualUserMetadata = putRequestCaptor.getValue().metadata();
     customMetadata.entrySet().forEach(entry ->
         assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
-    objectJsonMetadata.getUserMetadata().entrySet().stream()
+    headObjectResponse.metadata().entrySet()
         .forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
   }
 
@@ -190,20 +200,22 @@ class AwsStorageServiceTest {
   void shouldUploadFileWithoutNewCustomMetadata() throws IOException {
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .files(List.of(file1Mock, file2Mock)).customMetadata(null).build();
-    final var key = format("%s/%s", storageDto.getFolderPath(), fileName);
+    key = format("%s/%s", storageDto.getFolderPath(), fileName);
 
-    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(headObjectResponse);
     when(file1Mock.getOriginalFilename()).thenReturn(fileName);
     when(file2Mock.getOriginalFilename()).thenReturn(fileName);
     when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
     when(file2Mock.getInputStream()).thenReturn(inputStreamMock);
-    when(s3Mock.putObject(putRequestCaptor.capture())).thenReturn(resultMock);
+    when(s3Mock.putObject(putRequestCaptor.capture(), any(RequestBody.class))).thenReturn(
+        putObjectResponse);
 
     final var putObjectResult = awsStorageService.upload(storageDto);
 
     assertThat(putObjectResult, hasSize(2));
-    var actualUserMetadata = putRequestCaptor.getValue().getMetadata().getUserMetadata();
-    objectJsonMetadata.getUserMetadata().entrySet().stream()
+    var actualUserMetadata = putRequestCaptor.getValue().metadata();
+    headObjectResponse.metadata().entrySet().stream()
         .forEach(entry -> assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
   }
 
@@ -211,31 +223,39 @@ class AwsStorageServiceTest {
   void shouldCreateBucketIfNotExistWhenUpload() throws IOException {
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .files(List.of(file1Mock, file2Mock)).customMetadata(customMetadata).build();
-    final var key = format("%s/%s", storageDto.getFolderPath(), fileName);
+    key = format("%s/%s", storageDto.getFolderPath(), fileName);
 
-    when(s3Mock.doesBucketExistV2(bucketName)).thenReturn(false);
-    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(new ObjectMetadata());
+    when(s3Mock.headBucket(headBucketRequestCaptor.capture())).thenThrow(
+        NoSuchBucketException.builder().build());
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(HeadObjectResponse.builder()
+        .build());
     when(file1Mock.getOriginalFilename()).thenReturn(fileName);
     when(file2Mock.getOriginalFilename()).thenReturn(fileName);
     when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
     when(file2Mock.getInputStream()).thenReturn(inputStreamMock);
-    when(s3Mock.putObject(putRequestCaptor.capture())).thenReturn(resultMock);
+    when(s3Mock.putObject(putRequestCaptor.capture(), any(RequestBody.class))).thenReturn(
+        putObjectResponse);
 
     final var putObjectResult = awsStorageService.upload(storageDto);
 
-    verify(s3Mock).createBucket(bucketName);
+    verify(s3Mock).createBucket(CreateBucketRequest.builder().bucket(bucketName)
+        .build());
     assertThat(putObjectResult, hasSize(2));
     var actualUserMetadata =
-        putRequestCaptor.getValue().getMetadata().getUserMetadata();
+        putRequestCaptor.getValue().metadata();
     customMetadata.entrySet().forEach(entry ->
         assertThat(actualUserMetadata.entrySet(), hasItem(entry)));
+    assertEquals(bucketName, headBucketRequestCaptor.getValue().bucket());
   }
 
   @Test
-  void shouldHandleExceptionIfUploadFails() {
-    when(s3Mock.getObjectMetadata(any())).thenReturn(new ObjectMetadata());
-    when(s3Mock.putObject(any())).thenThrow(AmazonServiceException.class);
-
+  void shouldHandleExceptionIfUploadFails() throws IOException {
+    when(s3Mock.headObject(any(HeadObjectRequest.class))).thenReturn(HeadObjectResponse.builder()
+        .build());
+    when(file1Mock.getInputStream()).thenReturn(inputStreamMock);
+    when(s3Mock.putObject(any(PutObjectRequest.class), any(RequestBody.class))).thenThrow(
+        AwsServiceException.class);
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .files(List.of(file1Mock)).build();
 
@@ -244,8 +264,10 @@ class AwsStorageServiceTest {
 
   @Test
   void shouldDownloadFileFromS3() {
-    final var s3Object = createObject(null, null, fileContent);
-    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
+    final ResponseInputStream<GetObjectResponse> responseResponseInputStream = createObject(
+        fileContent);
+    when(s3Mock.getObject(GetObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(responseResponseInputStream);
 
     final var storageDto = StorageDto.builder().bucketName(bucketName)
         .key(key).build();
@@ -257,18 +279,19 @@ class AwsStorageServiceTest {
 
   @Test
   void shouldThrowExceptionWhenDownloadFileNotFound() {
-    when(s3Mock.getObject(bucketName, key)).thenThrow(AmazonServiceException.class);
+    when(s3Mock.getObject(GetObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenThrow(AwsServiceException.class);
 
     final var storageDto = StorageDto.builder().bucketName(bucketName)
         .key(key).build();
     assertThrows(AwsStorageException.class, () -> awsStorageService.download(storageDto));
   }
 
-
   @Test
   void getDataShouldReturnExpectedData() {
-    final S3Object stubbedValue = createObject(bucketName, key, fileContent);
-    when(s3Mock.getObject(bucketName, key)).thenReturn(stubbedValue);
+    final ResponseInputStream<GetObjectResponse> stubbedValue = createObject(fileContent);
+    when(s3Mock.getObject(GetObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(stubbedValue);
 
     final StorageDto input = StorageDto.builder().bucketName(bucketName).key(key).build();
     final String actual = awsStorageService.getData(input);
@@ -281,8 +304,8 @@ class AwsStorageServiceTest {
     final var storageDto = StorageDto.builder().bucketName(bucketName)
         .key(key).build();
     String expectedMessage = "Expected Exception";
-    when(s3Mock.getObject(bucketName, key)).thenThrow(new AmazonServiceException(
-        expectedMessage));
+    when(s3Mock.getObject(GetObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenThrow(AwsServiceException.builder().message(expectedMessage).build());
 
     Throwable actual =
         assertThrows(AwsStorageException.class, () -> awsStorageService.getData(storageDto));
@@ -291,12 +314,16 @@ class AwsStorageServiceTest {
 
   @Test
   void shouldListFilesFromS3() {
-    final var key = folderName + "/test.txt";
-    final S3ObjectSummary s3ObjectSummary = createSummary(bucketName, key);
-    when(s3Mock.listObjects(bucketName, folderName + "/")).thenReturn(objectListingMock);
-    when(objectListingMock.getObjectSummaries()).thenReturn(List.of(s3ObjectSummary));
-    expectMetadataInteractions(bucketName, key, metadataMock, "test.txt", "txt");
-    when(metadataMock.getUserMetadata()).thenReturn(Map.of("destination", "unknown"));
+    key = folderName + "/test.txt";
+    final S3Object s3ObjectSummary = createSummary(key);
+    ListObjectsResponse listObjectsResponse = ListObjectsResponse.builder()
+        .contents(List.of(s3ObjectSummary))
+        .build();
+    when(s3Mock.listObjects(ListObjectsRequest.builder().bucket(bucketName).prefix(folderName + "/")
+        .build())).thenReturn(listObjectsResponse);
+    HeadObjectResponse headObjectResp = HeadObjectResponse.builder()
+        .metadata(Map.of("destination", "unknown")).build();
+    expectMetadataInteractions(bucketName, key, headObjectResp, "test.txt", "txt");
 
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .build();
@@ -312,11 +339,14 @@ class AwsStorageServiceTest {
 
   @Test
   void shouldListFilesFromS3WithoutMetadata() {
-    final var key = folderName + "/test.txt";
-    final S3ObjectSummary s3ObjectSummary = createSummary(bucketName, key);
-    when(s3Mock.listObjects(bucketName, folderName + "/")).thenReturn(objectListingMock);
-    when(objectListingMock.getObjectSummaries()).thenReturn(List.of(s3ObjectSummary));
-    expectMetadataInteractions(bucketName, key, metadataMock, null, null);
+    key = folderName + "/test.txt";
+    final S3Object s3ObjectSummary = createSummary(key);
+    ListObjectsResponse listObjectsResponse = ListObjectsResponse.builder()
+        .contents(List.of(s3ObjectSummary))
+        .build();
+    when(s3Mock.listObjects(ListObjectsRequest.builder().bucket(bucketName).prefix(folderName + "/")
+        .build())).thenReturn(listObjectsResponse);
+    expectMetadataInteractions(bucketName, key, HeadObjectResponse.builder().build(), null, null);
 
     final var storageDto = StorageDto.builder().bucketName(bucketName).folderPath(folderName)
         .build();
@@ -326,7 +356,6 @@ class AwsStorageServiceTest {
     assertThat(objectSummaries.get(0).getKey(), is(key));
     assertThat(objectSummaries.get(0).getFileName(), is(nullValue()));
     assertThat(objectSummaries.get(0).getCustomMetadata(), is(nullValue()));
-    verify(metadataMock, never()).getUserMetadata();
   }
 
   @Test
@@ -335,8 +364,9 @@ class AwsStorageServiceTest {
         .bucketName(bucketName)
         .folderPath(folderName)
         .build();
-    when(s3Mock.listObjects(bucketName, folderName + "/"))
-        .thenThrow(AmazonServiceException.class);
+    when(s3Mock.listObjects(ListObjectsRequest.builder().bucket(bucketName).prefix(folderName + "/")
+        .build()))
+        .thenThrow(AwsServiceException.class);
     assertThrows(AwsStorageException.class, () -> awsStorageService.listFiles(storageDto, false,
         null));
   }
@@ -345,8 +375,13 @@ class AwsStorageServiceTest {
   void shouldDeleteFileFromS3() {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
         .build();
+    HeadObjectResponse headObjectResponse1 = HeadObjectResponse.builder().build();
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(headObjectResponse1);
+
     awsStorageService.delete(storageDto);
-    verify(s3Mock).deleteObject(bucketName, key);
+    verify(s3Mock).deleteObject(DeleteObjectRequest.builder().bucket(bucketName).key(key)
+        .build());
 
     verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
     DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
@@ -360,11 +395,14 @@ class AwsStorageServiceTest {
   void shouldHardDeleteIfDeleteTypeIsHard() {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
         .build();
-    objectJsonMetadata.addUserMetadata("deletetype", DeleteType.HARD.name());
+    HeadObjectResponse headObjectResponse1 = HeadObjectResponse.builder()
+        .metadata(Map.of("deletetype", DeleteType.HARD.name())).build();
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(headObjectResponse1);
 
-    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
     awsStorageService.delete(storageDto);
-    verify(s3Mock).deleteObject(bucketName, key);
+    verify(s3Mock).deleteObject(DeleteObjectRequest.builder().bucket(bucketName).key(key)
+        .build());
 
     verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
     DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
@@ -378,7 +416,13 @@ class AwsStorageServiceTest {
   void shouldThrowExceptionWhenFailToHardDeleteFile() {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key)
         .build();
-    doThrow(AmazonServiceException.class).when(s3Mock).deleteObject(bucketName, key);
+    HeadObjectResponse headObjectResponse1 = HeadObjectResponse.builder().build();
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(headObjectResponse1);
+
+    doThrow(AwsServiceException.class).when(s3Mock)
+        .deleteObject(DeleteObjectRequest.builder().bucket(bucketName).key(key)
+            .build());
     assertThrows(AwsStorageException.class, () -> awsStorageService.delete(storageDto));
   }
 
@@ -386,38 +430,48 @@ class AwsStorageServiceTest {
   void shouldPartialDeleteFileFromS3() throws IOException {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key).build();
 
-    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
-    final S3Object s3Object = createObject(bucketName, key, jsonFileContent);
-    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
-    when(s3Mock.getBucketVersioningConfiguration(bucketName))
-        .thenReturn(bucketVersioningConfiguration);
-    when(s3Mock.listVersions(bucketName, key)).thenReturn(versions);
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(headObjectResponse);
+    final ResponseInputStream<GetObjectResponse> s3Object = createObject(jsonFileContent);
+    when(s3Mock.getObject(GetObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(s3Object);
+    when(s3Mock.getBucketVersioning(GetBucketVersioningRequest.builder().bucket(bucketName)
+        .build())).thenReturn(getBucketVersioningResponse);
+    when(
+        s3Mock.listObjectVersions(ListObjectVersionsRequest.builder().bucket(bucketName).prefix(key)
+            .build())).thenReturn(versions);
 
     awsStorageService.delete(storageDto);
 
-    verify(s3Mock).putObject(putRequestCaptor.capture());
+    verify(s3Mock).putObject(putRequestCaptor.capture(), requestBodyCaptor.capture());
     PutObjectRequest putObjectRequest = putRequestCaptor.getValue();
 
-    assertThat("Unexpected bucket.", putObjectRequest.getBucketName(), is(bucketName));
-    assertThat("Unexpected key.", putObjectRequest.getKey(), is(key));
+    assertThat("Unexpected bucket.", putObjectRequest.bucket(), is(bucketName));
+    assertThat("Unexpected key.", putObjectRequest.key(), is(key));
 
-    final var resultInputStream = putObjectRequest.getInputStream();
+    final var resultInputStream = requestBodyCaptor.getValue().contentStreamProvider().newStream();
     ObjectMapper mapper = new ObjectMapper();
     Map<String, Object> resultJsonMap = mapper.readValue(resultInputStream, Map.class);
     assertThat("Unexpected input stream.", resultJsonMap.get("id"), is("1"));
     assertThat("Unexpected input stream.", resultJsonMap.get("lifecycleState"),
         is(LifecycleState.DELETED.name()));
 
-    final var resultUserMetadata = putObjectRequest.getMetadata().getUserMetadata();
-    objectJsonMetadata.getUserMetadata().entrySet().stream()
+    final var resultUserMetadata = putObjectRequest.metadata();
+    headObjectResponse.metadata().entrySet().stream()
         .filter(meta -> meta.getKey() != "lifecyclestate")
         .forEach(entry -> assertThat(resultUserMetadata.entrySet(), hasItem(entry)));
     assertThat("Unexpected lifecycleState in object Metadata.",
         resultUserMetadata.get("lifecyclestate"), is(LifecycleState.DELETED.name()));
 
-    verify(s3Mock, never()).deleteVersion(bucketName, key, "1");
-    verify(s3Mock).deleteVersion(bucketName, key, "2");
-    verify(s3Mock).deleteVersion(bucketName, key, "3");
+    verify(s3Mock, never()).deleteObject(
+        DeleteObjectRequest.builder().bucket(bucketName).key(key).versionId("1")
+            .build());
+    verify(s3Mock).deleteObject(
+        DeleteObjectRequest.builder().bucket(bucketName).key(key).versionId("2")
+            .build());
+    verify(s3Mock).deleteObject(
+        DeleteObjectRequest.builder().bucket(bucketName).key(key).versionId("3")
+            .build());
 
     verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
     DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
@@ -430,12 +484,15 @@ class AwsStorageServiceTest {
   @Test
   void shouldThrowExceptionWhenFailToPartialDeleteFile() {
     final StorageDto storageDto = StorageDto.builder().bucketName(bucketName).key(key).build();
-    final S3Object s3Object = createObject(bucketName, key, jsonFileContent);
+    final ResponseInputStream<GetObjectResponse> s3Object = createObject(jsonFileContent);
 
-    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
-    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(headObjectResponse);
+    when(s3Mock.getObject(GetObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(s3Object);
 
-    when(s3Mock.putObject(any())).thenThrow(AmazonServiceException.class);
+    when(s3Mock.putObject(any(PutObjectRequest.class), any(RequestBody.class))).thenThrow(
+        AwsServiceException.class);
     assertThrows(AwsStorageException.class, () -> awsStorageService.delete(storageDto));
   }
 
@@ -443,24 +500,30 @@ class AwsStorageServiceTest {
   void shouldNotUpdateFileContentIfPartialDeleteFileTypeNotJson() throws IOException {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key).build();
 
-    objectJsonMetadata.addUserMetadata("type", "doc");
+    var metadata = new HashMap<>(headObjectResponse.metadata());
+    metadata.put("type", "doc");
 
-    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
-    final S3Object s3Object = createObject(bucketName, key, jsonFileContent);
-    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
-    when(s3Mock.getBucketVersioningConfiguration(bucketName))
-        .thenReturn(bucketVersioningConfiguration);
-    when(s3Mock.listVersions(bucketName, key)).thenReturn(versions);
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(headObjectResponse.toBuilder().metadata(metadata).build());
+    final ResponseInputStream<GetObjectResponse> s3Object = createObject(jsonFileContent);
+    when(s3Mock.getObject(GetObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(s3Object);
+    when(s3Mock.getBucketVersioning(
+        GetBucketVersioningRequest.builder().bucket(bucketName).build())).thenReturn(
+        getBucketVersioningResponse);
+    when(
+        s3Mock.listObjectVersions(ListObjectVersionsRequest.builder().bucket(bucketName).prefix(key)
+            .build())).thenReturn(versions);
 
     awsStorageService.delete(storageDto);
 
-    verify(s3Mock).putObject(putRequestCaptor.capture());
+    verify(s3Mock).putObject(putRequestCaptor.capture(), requestBodyCaptor.capture());
     PutObjectRequest putObjectRequest = putRequestCaptor.getValue();
 
-    assertThat("Unexpected bucket.", putObjectRequest.getBucketName(), is(bucketName));
-    assertThat("Unexpected key.", putObjectRequest.getKey(), is(key));
+    assertThat("Unexpected bucket.", putObjectRequest.bucket(), is(bucketName));
+    assertThat("Unexpected key.", putObjectRequest.key(), is(key));
 
-    final var resultInputStream = putObjectRequest.getInputStream();
+    final var resultInputStream = requestBodyCaptor.getValue().contentStreamProvider().newStream();
     ObjectMapper mapper = new ObjectMapper();
     Map<String, Object> resultJsonMap = mapper.readValue(resultInputStream, Map.class);
     assertThat("Unexpected input stream.", resultJsonMap.get("id"), is("1"));
@@ -468,16 +531,22 @@ class AwsStorageServiceTest {
         is("SUBMITTED"));
     assertThat("Unexpected input stream.", resultJsonMap.get("forename"), is("forename"));
 
-    final var resultUserMetadata = putObjectRequest.getMetadata().getUserMetadata();
-    objectJsonMetadata.getUserMetadata().entrySet().stream()
+    final var resultUserMetadata = putObjectRequest.metadata();
+    metadata.entrySet().stream()
         .filter(meta -> meta.getKey() != "lifecyclestate")
         .forEach(entry -> assertThat(resultUserMetadata.entrySet(), hasItem(entry)));
     assertThat("Unexpected lifecycleState in object Metadata.",
         resultUserMetadata.get("lifecyclestate"), is(LifecycleState.DELETED.name()));
 
-    verify(s3Mock, never()).deleteVersion(bucketName, key, "1");
-    verify(s3Mock).deleteVersion(bucketName, key, "2");
-    verify(s3Mock).deleteVersion(bucketName, key, "3");
+    verify(s3Mock, never()).deleteObject(
+        DeleteObjectRequest.builder().bucket(bucketName).key(key).versionId("1")
+            .build());
+    verify(s3Mock).deleteObject(
+        DeleteObjectRequest.builder().bucket(bucketName).key(key).versionId("2")
+            .build());
+    verify(s3Mock).deleteObject(
+        DeleteObjectRequest.builder().bucket(bucketName).key(key).versionId("3")
+            .build());
 
     verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
     DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
@@ -491,39 +560,48 @@ class AwsStorageServiceTest {
   void shouldNotDeleteVersionIfPartialDeleteVersioningNotEnable() throws IOException {
     final var storageDto = StorageDto.builder().bucketName(bucketName).key(key).build();
 
-    bucketVersioningConfiguration.setStatus(BucketVersioningConfiguration.OFF);
+    getBucketVersioningResponse = GetBucketVersioningResponse.builder().build();
 
-    when(s3Mock.getObjectMetadata(bucketName, key)).thenReturn(objectJsonMetadata);
-    final S3Object s3Object = createObject(bucketName, key, jsonFileContent);
-    when(s3Mock.getObject(bucketName, key)).thenReturn(s3Object);
-    when(s3Mock.getBucketVersioningConfiguration(bucketName))
-        .thenReturn(bucketVersioningConfiguration);
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(headObjectResponse);
+    final ResponseInputStream<GetObjectResponse> s3Object = createObject(jsonFileContent);
+    when(s3Mock.getObject(GetObjectRequest.builder().bucket(bucketName).key(key)
+        .build())).thenReturn(s3Object);
+    when(s3Mock.getBucketVersioning(GetBucketVersioningRequest.builder().bucket(bucketName)
+        .build()))
+        .thenReturn(getBucketVersioningResponse);
 
     awsStorageService.delete(storageDto);
 
-    verify(s3Mock).putObject(putRequestCaptor.capture());
+    verify(s3Mock).putObject(putRequestCaptor.capture(), requestBodyCaptor.capture());
     PutObjectRequest putObjectRequest = putRequestCaptor.getValue();
 
-    assertThat("Unexpected bucket.", putObjectRequest.getBucketName(), is(bucketName));
-    assertThat("Unexpected key.", putObjectRequest.getKey(), is(key));
+    assertThat("Unexpected bucket.", putObjectRequest.bucket(), is(bucketName));
+    assertThat("Unexpected key.", putObjectRequest.key(), is(key));
 
-    final var resultInputStream = putObjectRequest.getInputStream();
+    final var resultInputStream = requestBodyCaptor.getValue().contentStreamProvider().newStream();
     ObjectMapper mapper = new ObjectMapper();
     Map<String, Object> resultJsonMap = mapper.readValue(resultInputStream, Map.class);
     assertThat("Unexpected input stream.", resultJsonMap.get("id"), is("1"));
     assertThat("Unexpected input stream.", resultJsonMap.get("lifecycleState"),
         is(LifecycleState.DELETED.name()));
 
-    final var resultUserMetadata = putObjectRequest.getMetadata().getUserMetadata();
-    objectJsonMetadata.getUserMetadata().entrySet().stream()
+    final var resultUserMetadata = putObjectRequest.metadata();
+    headObjectResponse.metadata().entrySet().stream()
         .filter(meta -> meta.getKey() != "lifecyclestate")
         .forEach(entry -> assertThat(resultUserMetadata.entrySet(), hasItem(entry)));
     assertThat("Unexpected lifecycleState in object Metadata.",
         resultUserMetadata.get("lifecyclestate"), is(LifecycleState.DELETED.name()));
 
-    verify(s3Mock, never()).deleteVersion(bucketName, key, "1");
-    verify(s3Mock, never()).deleteVersion(bucketName, key, "2");
-    verify(s3Mock, never()).deleteVersion(bucketName, key, "3");
+    verify(s3Mock, never()).deleteObject(
+        DeleteObjectRequest.builder().bucket(bucketName).key(key).versionId("1")
+            .build());
+    verify(s3Mock, never()).deleteObject(
+        DeleteObjectRequest.builder().bucket(bucketName).key(key).versionId("2")
+            .build());
+    verify(s3Mock, never()).deleteObject(
+        DeleteObjectRequest.builder().bucket(bucketName).key(key).versionId("3")
+            .build());
 
     verify(snsMock).publishSnsDeleteEventTopic(deleteEventCaptor.capture());
     DeleteEventDto resultDeleteEvent = deleteEventCaptor.getValue();
@@ -533,26 +611,26 @@ class AwsStorageServiceTest {
         resultDeleteEvent.getDeleteType(), is(DeleteType.PARTIAL));
   }
 
-  private S3Object createObject(String bucketName, String key, String fileContent) {
-    S3Object obj = new S3Object();
-    obj.setBucketName(bucketName);
-    obj.setKey(key);
-    obj.setObjectContent(new ByteArrayInputStream(fileContent.getBytes()));
-    return obj;
+  private ResponseInputStream<GetObjectResponse> createObject(String fileContent) {
+    GetObjectResponse response = GetObjectResponse.builder().build();
+    ByteArrayInputStream contentStream = new ByteArrayInputStream(fileContent.getBytes());
+
+    return new ResponseInputStream<>(response, contentStream);
   }
 
-  private S3ObjectSummary createSummary(String bucketName, String objectKey) {
-    S3ObjectSummary summary = new S3ObjectSummary();
-    summary.setBucketName(bucketName);
-    summary.setKey(objectKey);
-    return summary;
+  private S3Object createSummary(String objectKey) {
+    return S3Object.builder().key(objectKey).build();
   }
 
   private void expectMetadataInteractions(String objectBucketName, String objectKey,
-      ObjectMetadata objectMetadata, String objectName, String objectType) {
-    when(s3Mock.getObjectMetadata(objectBucketName, objectKey)).thenReturn(objectMetadata);
-    when(objectMetadata.getUserMetaDataOf("name")).thenReturn(objectName);
-    when(objectMetadata.getUserMetaDataOf("type")).thenReturn(objectType);
+      HeadObjectResponse headObjectResp,
+      String objectName, String objectType) {
+    var metadata = new HashMap<>(headObjectResp.metadata());
+    metadata.put("name", objectName);
+    metadata.put("type", objectType);
+    headObjectResp = headObjectResp.toBuilder().metadata(metadata).build();
+    when(s3Mock.headObject(HeadObjectRequest.builder().bucket(objectBucketName).key(objectKey)
+        .build())).thenReturn(headObjectResp);
   }
 
   @Nested
@@ -560,23 +638,36 @@ class AwsStorageServiceTest {
 
     @Test
     void listFilesShouldSort() {
-      S3ObjectSummary s3Object1 = createSummary(bucketName, key + "1");
-      S3ObjectSummary s3Object2 = createSummary(bucketName, key + "2");
-      S3ObjectSummary s3Object3 = createSummary(bucketName, key + "3");
-      S3ObjectSummary s3Object4 = createSummary(bucketName, key + "nullName");
-      when(s3Mock.listObjects(bucketName, folderName + "/")).thenReturn(objectListingMock);
-      when(objectListingMock.getObjectSummaries()).thenReturn(
-          Arrays.asList(s3Object2, s3Object4, s3Object1, s3Object3));
-      String test1Name = "test1.foo";
-      expectMetadataInteractions(bucketName, key + "1", metadataMock, test1Name, null);
-      String test2Name = "test2.foo";
-      expectMetadataInteractions(bucketName, key + "2", metadataMock2, test2Name, null);
-      String test3Name = "test3.foo";
-      expectMetadataInteractions(bucketName, key + "3", metadataMock3, test3Name, null);
-      expectMetadataInteractions(bucketName, key + "nullName", metadataMock4, null, null);
+      final String key1 = key + "1";
+      final String key2 = key + "2";
+      final String key3 = key + "3";
+      final String keyNullName = key + "nullName";
+      S3Object s3Object1 = createSummary(key1);
+      S3Object s3Object2 = createSummary(key2);
+      S3Object s3Object3 = createSummary(key3);
+      S3Object s3Object4 = createSummary(keyNullName);
+
+      ListObjectsResponse listObjectsResponse = ListObjectsResponse.builder()
+          .contents(List.of(s3Object2, s3Object4, s3Object1, s3Object3))
+          .build();
+      when(s3Mock.listObjects(
+          ListObjectsRequest.builder().bucket(bucketName).prefix(folderName + "/")
+              .build())).thenReturn(listObjectsResponse);
+      final String test1Name = "test1.foo";
+      final String test2Name = "test2.foo";
+      final String test3Name = "test3.foo";
+      expectMetadataInteractions(bucketName, key1, HeadObjectResponse.builder().build(), test1Name,
+          null);
+      expectMetadataInteractions(bucketName, key2, HeadObjectResponse.builder().build(), test2Name,
+          null);
+      expectMetadataInteractions(bucketName, key3, HeadObjectResponse.builder().build(), test3Name,
+          null);
+      expectMetadataInteractions(bucketName, keyNullName, HeadObjectResponse.builder().build(),
+          null, null);
 
       final StorageDto storageDto = StorageDto.builder().bucketName(bucketName)
           .folderPath(folderName).build();
+
       final var actualFileSummaryList = awsStorageService
           .listFiles(storageDto, false, "fileName,desc");
 
@@ -590,13 +681,20 @@ class AwsStorageServiceTest {
     @ParameterizedTest
     @ValueSource(strings = {"nonexistantProp,asc", "filename,asc,extraBit"})
     void listFilesWithBadSortShouldStillReturn(String sort) {
-      S3ObjectSummary s3Object1 = createSummary(bucketName, key + "1");
-      S3ObjectSummary s3Object4 = createSummary(bucketName, key + "nullName");
-      when(s3Mock.listObjects(bucketName, folderName + "/")).thenReturn(objectListingMock);
-      when(objectListingMock.getObjectSummaries()).thenReturn(
-          Arrays.asList(s3Object4, s3Object1));
-      expectMetadataInteractions(bucketName, key + "1", metadataMock, null, null);
-      expectMetadataInteractions(bucketName, key + "nullName", metadataMock, null, null);
+      final String key1 = key + "1";
+      final String keyNullName = key + "nullName";
+      S3Object s3Object1 = createSummary(key1);
+      S3Object s3Object4 = createSummary(keyNullName);
+      ListObjectsResponse listObjectsResponse = ListObjectsResponse.builder()
+          .contents(List.of(s3Object4, s3Object1))
+          .build();
+      when(s3Mock.listObjects(
+          ListObjectsRequest.builder().bucket(bucketName).prefix(folderName + "/")
+              .build())).thenReturn(listObjectsResponse);
+      expectMetadataInteractions(bucketName, key1, HeadObjectResponse.builder().build(), null,
+          null);
+      expectMetadataInteractions(bucketName, keyNullName, HeadObjectResponse.builder().build(),
+          null, null);
 
       final StorageDto storageDto = StorageDto.builder().bucketName(bucketName)
           .folderPath(folderName).build();
@@ -605,5 +703,4 @@ class AwsStorageServiceTest {
       assertThat(actualList, hasSize(2));
     }
   }
-
 }
