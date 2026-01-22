@@ -118,7 +118,8 @@ public class AwsStorageService {
             .metadata(metadata).contentLength(file.getSize()).build();
 
         log.info("uploading file: {} to bucket: {} with key: {}", file.getName(), bucketName, key);
-        return amazonS3.putObject(request, RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
+        return amazonS3.putObject(request,
+            RequestBody.fromInputStream(file.getInputStream(), file.getSize()));
 
       } catch (Exception e) {
         log.error("Failed to upload file: {} in bucket: {}", file.getOriginalFilename(), bucketName,
@@ -138,7 +139,8 @@ public class AwsStorageService {
     try {
       log.info("Download file: {} from bucket: {} with key: {}", storageDto.getKey(),
           storageDto.getBucketName(), storageDto.getKey());
-      GetObjectRequest request = GetObjectRequest.builder().bucket(storageDto.getBucketName()).key(storageDto.getKey()).build();
+      GetObjectRequest request = GetObjectRequest.builder().bucket(storageDto.getBucketName())
+          .key(storageDto.getKey()).build();
 
       try (ResponseInputStream<GetObjectResponse> s3Object = amazonS3.getObject(request)) {
         byte[] content = s3Object.readAllBytes();
@@ -333,7 +335,7 @@ public class AwsStorageService {
           ListObjectVersionsRequest.builder().bucket(bucket).prefix(key)
               .build());
       for (ObjectVersion version : versions.versions()) {
-        if (!version.isLatest()) {
+        if (Boolean.FALSE.equals(version.isLatest())) {
           amazonS3.deleteObject(
               DeleteObjectRequest.builder().bucket(bucket).key(key).versionId(version.versionId())
                   .build());
@@ -343,15 +345,15 @@ public class AwsStorageService {
   }
 
   private void createBucketIfNotExist(final String bucketName) {
-      try {
-        amazonS3.headBucket(HeadBucketRequest.builder().bucket(bucketName).build());
-        return;
-      } catch (NoSuchBucketException e) {
-        // expected
-      }
-      amazonS3.createBucket(CreateBucketRequest.builder().bucket(bucketName)
-            .build());
+    try {
+      amazonS3.headBucket(HeadBucketRequest.builder().bucket(bucketName).build());
+      return;
+    } catch (NoSuchBucketException e) {
+      // expected
     }
+    amazonS3.createBucket(CreateBucketRequest.builder().bucket(bucketName)
+        .build());
+  }
 
   private FileSummaryDto buildFileSummary(final S3Object summary, final String bucketName,
       final boolean includeCustomMetadata) {
