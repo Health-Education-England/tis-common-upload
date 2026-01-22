@@ -37,13 +37,13 @@ public class AwsStorageController {
    * @return Response entity with status code 200
    */
   @PostMapping(value = "/upload")
-  public ResponseEntity uploadFile(final StorageDto storageDto) {
+  public ResponseEntity<Void> uploadFile(final StorageDto storageDto) {
 
     log.info("Request receive to upload file: {}", storageDto);
     if (Objects.nonNull(storageDto.getBucketName()) && Objects.nonNull(storageDto.getFolderPath())
         && Objects.nonNull(storageDto.getFiles()) && !storageDto.getFiles().isEmpty()) {
-      final var response = awsStorageService.upload(storageDto);
-      return ResponseEntity.ok(response);
+      awsStorageService.upload(storageDto);
+      return ResponseEntity.ok().build();
     } else {
       throw new AwsStorageException(
           "Bucket Name, File and Folder Path all parameters required to serve download");
