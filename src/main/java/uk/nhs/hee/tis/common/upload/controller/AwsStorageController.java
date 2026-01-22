@@ -6,7 +6,6 @@ import static org.springframework.http.HttpHeaders.CONTENT_TYPE;
 import java.util.List;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,13 +21,24 @@ import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
 
+/**
+ * Controller to handle AWS S3 storage operations.
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/storage")
 public class AwsStorageController {
 
-  @Autowired
-  private AwsStorageService awsStorageService;
+  private final AwsStorageService awsStorageService;
+
+  /**
+   * Constructor for AwsStorageController.
+   *
+   * @param awsStorageService the AWS storage service
+   */
+  AwsStorageController(AwsStorageService awsStorageService) {
+    this.awsStorageService = awsStorageService;
+  }
 
   /**
    * API to upload file to s3.
@@ -37,13 +47,13 @@ public class AwsStorageController {
    * @return Response entity with status code 200
    */
   @PostMapping(value = "/upload")
-  public ResponseEntity uploadFile(final StorageDto storageDto) {
+  public ResponseEntity<Void> uploadFile(final StorageDto storageDto) {
 
     log.info("Request receive to upload file: {}", storageDto);
     if (Objects.nonNull(storageDto.getBucketName()) && Objects.nonNull(storageDto.getFolderPath())
         && Objects.nonNull(storageDto.getFiles()) && !storageDto.getFiles().isEmpty()) {
-      final var response = awsStorageService.upload(storageDto);
-      return ResponseEntity.ok(response);
+      awsStorageService.upload(storageDto);
+      return ResponseEntity.ok().build();
     } else {
       throw new AwsStorageException(
           "Bucket Name, File and Folder Path all parameters required to serve download");
@@ -58,7 +68,8 @@ public class AwsStorageController {
    * @return Response entity with status code 200 and file to download
    */
   @GetMapping("/download")
-  public ResponseEntity downloadFile(@RequestParam("bucketName") final String bucketName,
+  public ResponseEntity<ByteArrayResource> downloadFile(
+      @RequestParam("bucketName") final String bucketName,
       @RequestParam("key") final String key) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(key)) {
@@ -111,8 +122,8 @@ public class AwsStorageController {
       @RequestParam("bucketName") final String bucketName,
       @RequestParam("folderPath") final String folderPath,
       @RequestParam(value = "sort", required = false) final String sort,
-      @RequestParam(value = "includeCustomMetadata", required = false)
-        final boolean includeCustomMetaData) {
+      @RequestParam(value = "includeCustomMetadata", defaultValue = "false")
+      final boolean includeCustomMetaData) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(folderPath)) {
       log.info("Request receive to list files from bucket: {} and folder location: {}",

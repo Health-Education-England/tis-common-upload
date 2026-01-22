@@ -29,14 +29,14 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.amazonaws.services.sns.AmazonSNS;
-import com.amazonaws.services.sns.model.AmazonSNSException;
-import com.amazonaws.services.sns.model.PublishRequest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import software.amazon.awssdk.services.sns.SnsClient;
+import software.amazon.awssdk.services.sns.model.PublishRequest;
+import software.amazon.awssdk.services.sns.model.SnsException;
 import uk.nhs.hee.tis.common.upload.dto.DeleteEventDto;
 import uk.nhs.hee.tis.common.upload.enumeration.DeleteType;
 
@@ -46,11 +46,11 @@ class AwsSnsServiceTest {
 
   private AwsSnsService awsSnsService;
 
-  private AmazonSNS snsClientMock;
+  private SnsClient snsClientMock;
 
   @BeforeEach
   void setup() {
-    snsClientMock = mock(AmazonSNS.class);
+    snsClientMock = mock(SnsClient.class);
     awsSnsService = new AwsSnsService(TOPIC_ARN, snsClientMock, new ObjectMapper());
   }
 
@@ -70,9 +70,9 @@ class AwsSnsServiceTest {
     verify(snsClientMock).publish(requestCaptor.capture());
 
     PublishRequest resultPubRequest = requestCaptor.getValue();
-    assertThat("Unexpected message.", resultPubRequest.getMessage(),
+    assertThat("Unexpected message.", resultPubRequest.message(),
         is(deleteEventJson.toString()));
-    assertThat("Unexpected topic Arn.", resultPubRequest.getTopicArn(), is(TOPIC_ARN));
+    assertThat("Unexpected topic Arn.", resultPubRequest.topicArn(), is(TOPIC_ARN));
   }
 
   @Test
@@ -82,8 +82,8 @@ class AwsSnsServiceTest {
     deleteEventDto.setKey("file-to-delete.json");
     deleteEventDto.setDeleteType(DeleteType.PARTIAL);
 
-    when(snsClientMock.publish(any())).thenThrow(
-        AmazonSNSException.class);
+    when(snsClientMock.publish(any(PublishRequest.class))).thenThrow(
+        SnsException.class);
     assertDoesNotThrow(() -> awsSnsService.publishSnsDeleteEventTopic(deleteEventDto));
   }
 }

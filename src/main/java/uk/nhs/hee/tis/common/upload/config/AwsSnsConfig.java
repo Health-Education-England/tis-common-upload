@@ -2,16 +2,16 @@ package uk.nhs.hee.tis.common.upload.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.sns.SnsClient;
 
 /**
- * A configuration class for Amazon S3 integration.
+ * A configuration class for AWS SNS client.
  */
 @Configuration
-public class AwsS3Config {
+public class AwsSnsConfig {
 
   @Bean
-  public S3Client amazonS3() {
-    return S3Client.create();
+  public SnsClient snsClient() {
+    return SnsClient.create();
   }
 }
