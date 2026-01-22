@@ -6,7 +6,6 @@ import static org.springframework.http.HttpHeaders.CONTENT_TYPE;
 import java.util.List;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.io.AbstractResource;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -69,7 +68,8 @@ public class AwsStorageController {
    * @return Response entity with status code 200 and file to download
    */
   @GetMapping("/download")
-  public ResponseEntity<ByteArrayResource> downloadFile(@RequestParam("bucketName") final String bucketName,
+  public ResponseEntity<ByteArrayResource> downloadFile(
+      @RequestParam("bucketName") final String bucketName,
       @RequestParam("key") final String key) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(key)) {
@@ -123,7 +123,7 @@ public class AwsStorageController {
       @RequestParam("folderPath") final String folderPath,
       @RequestParam(value = "sort", required = false) final String sort,
       @RequestParam(value = "includeCustomMetadata", defaultValue = "false")
-        final boolean includeCustomMetaData) {
+      final boolean includeCustomMetaData) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(folderPath)) {
       log.info("Request receive to list files from bucket: {} and folder location: {}",
