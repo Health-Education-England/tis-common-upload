@@ -6,7 +6,6 @@ import static org.springframework.http.HttpHeaders.CONTENT_TYPE;
 import java.util.List;
 import java.util.Objects;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -22,13 +21,24 @@ import uk.nhs.hee.tis.common.upload.dto.StorageDto;
 import uk.nhs.hee.tis.common.upload.exception.AwsStorageException;
 import uk.nhs.hee.tis.common.upload.service.AwsStorageService;
 
+/**
+ * Controller to handle AWS S3 storage operations.
+ */
 @Slf4j
 @RestController
 @RequestMapping("/api/storage")
 public class AwsStorageController {
 
-  @Autowired
-  private AwsStorageService awsStorageService;
+  private final AwsStorageService awsStorageService;
+
+  /**
+   * Constructor for AwsStorageController.
+   *
+   * @param awsStorageService the AWS storage service
+   */
+  AwsStorageController(AwsStorageService awsStorageService) {
+    this.awsStorageService = awsStorageService;
+  }
 
   /**
    * API to upload file to s3.
@@ -111,7 +121,7 @@ public class AwsStorageController {
       @RequestParam("bucketName") final String bucketName,
       @RequestParam("folderPath") final String folderPath,
       @RequestParam(value = "sort", required = false) final String sort,
-      @RequestParam(value = "includeCustomMetadata", required = false)
+      @RequestParam(value = "includeCustomMetadata", defaultValue = "false")
         final boolean includeCustomMetaData) {
 
     if (Objects.nonNull(bucketName) && Objects.nonNull(folderPath)) {
