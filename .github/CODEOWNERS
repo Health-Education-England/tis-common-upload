@@ -1,8 +1,9 @@
 # --- Default ---
-* @Health-Education-England/internal-admin-backend 
+* @Health-Education-England/internal-admin-backend
 
 # --- DevOps owned ---
 /.github/workflows/ @Health-Education-England/internal-admin-devops
 /.aws/ @Health-Education-England/internal-admin-devops
 /gradlew @Health-Education-England/internal-admin-devops
 /gradlew.bat @Health-Education-England/internal-admin-devops
+/gradle/wrapper/ @Health-Education-England/internal-admin-devops
